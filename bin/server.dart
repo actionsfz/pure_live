@@ -40,6 +40,7 @@ void main(List<String> args) async {
   router.post('/api/favorites', _addFavorite);
   router.delete('/api/favorites/<platform>/<roomId>', _removeFavorite);
   router.post('/api/settings/cookie', _updateCookie);
+  router.get('/api/settings', _getSettings);
   router.get('/api/platforms', _getPlatforms);
   router.get('/api/image', _proxyImage);
   router.get('/api/reset-cache/<platform>', _resetPlatformCache);
@@ -51,18 +52,130 @@ void main(List<String> args) async {
   // WebSocket for danmaku
   router.get('/ws/danmaku/<platform>/<roomId>', _handleDanmakuWebSocket);
 
+  // Dedicated favicon route to ensure correct MIME type
+  router.get('/favicon.ico', _serveFavicon);
+  router.get('/favicon.png', _serveFavicon);
+
   // Serve Web Frontend
   // Assuming 'web' directory is in the root of the execution context
   var staticHandler = createStaticHandler('web', defaultDocument: 'index.html');
   router.mount('/', staticHandler);
 
   // Start Server
-  final handler = Pipeline().addMiddleware(logRequests()).addHandler(router.call);
-
+  // Start Server
+  final authPassword = Platform.environment['AUTH_PASSWORD'];
+  
+  final handler = Pipeline()
+      .addMiddleware(logRequests())
+      .addMiddleware(_authMiddleware(authPassword))
+      .addHandler(router.call);
+  
   final port = int.parse(Platform.environment['PORT'] ?? '8080');
   final server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
-
+  
   print('Serving at http://${server.address.host}:${server.port}');
+  if (authPassword != null && authPassword.isNotEmpty) {
+    print('Public Access Authentication Enabled');
+  } else {
+    print('Warning: No AUTH_PASSWORD set, public access is unprotected');
+  }
+}
+
+/// Authentication Middleware
+Middleware _authMiddleware(String? password) {
+  return (Handler innerHandler) {
+    return (Request request) async {
+      // 1. Check if password is required
+      if (password == null || password.isEmpty) {
+        return innerHandler(request);
+      }
+
+      // 2. Check IP (Allow Local/Private IPs)
+      final clientIp = _getClientIp(request);
+      if (_isPrivateIp(clientIp)) {
+        return innerHandler(request);
+      }
+
+      // 3. Verify Basic Auth for Public IPs
+      final authHeader = request.headers['authorization'];
+      if (authHeader != null && authHeader.startsWith('Basic ')) {
+        try {
+          final token = authHeader.substring(6);
+          final decoded = utf8.decode(base64.decode(token));
+          // Format is username:password
+          final parts = decoded.split(':');
+          if (parts.length >= 2) {
+            final providedPass = parts[1]; // We only check password, ignore username
+            if (providedPass == password) {
+              return innerHandler(request);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 4. Request Authentication
+      return Response(401, 
+        headers: {
+          'www-authenticate': 'Basic realm="Pure Live Server"',
+          'content-type': 'text/plain; charset=utf-8'
+        },
+        body: 'Unauthorized: Public access requires authentication.\nYour IP: $clientIp'
+      );
+    };
+  };
+}
+
+/// Get Client IP from request
+String _getClientIp(Request request) {
+  // Check Proxy Headers first
+  final forwarded = request.headers['x-forwarded-for'];
+  if (forwarded != null && forwarded.isNotEmpty) {
+    return forwarded.split(',').first.trim();
+  }
+  
+  final cfIp = request.headers['cf-connecting-ip'];
+  if (cfIp != null && cfIp.isNotEmpty) {
+    return cfIp;
+  }
+  
+  // Direct connection info
+  final connectionInfo = request.context['shelf.io.connection_info'] as shelf_io.HttpConnectionInfo?;
+  return connectionInfo?.remoteAddress.address ?? 'unknown';
+}
+
+/// Check if IP is private/local
+bool _isPrivateIp(String ipStr) {
+  if (ipStr == 'unknown') return false;
+  if (ipStr == '127.0.0.1' || ipStr == '::1') return true;
+  
+  try {
+    final ip = InternetAddress(ipStr);
+    
+    // Check Loopback
+    if (ip.isLoopback) return true;
+    
+    // Check Link Local
+    if (ip.isLinkLocal) return true;
+
+    if (ip.type == InternetAddressType.IPv4) {
+      final bytes = ip.rawAddress;
+      // 10.0.0.0/8
+      if (bytes[0] == 10) return true;
+      // 172.16.0.0/12 (172.16 - 172.31)
+      if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
+      // 192.168.0.0/16
+      if (bytes[0] == 192 && bytes[1] == 168) return true;
+    } else if (ip.type == InternetAddressType.IPv6) {
+      // Unique Local Address fc00::/7
+      final firstByte = ip.rawAddress[0];
+      if ((firstByte & 0xFE) == 0xFC) return true;
+    }
+  } catch (e) {
+    // Parsing error, treat as public just in case
+    return false;
+  }
+  
+  return false;
 }
 
 Future<Response> _getLiveStream(Request request, String platform, String roomId) async {
@@ -145,6 +258,28 @@ Future<Response> _updateCookie(Request request) async {
   } catch (e) {
     return Response.badRequest(body: 'Invalid data');
   }
+}
+
+/// Get current settings
+Future<Response> _getSettings(Request request) async {
+  final settings = Get.find<ServerSettings>();
+  final biliSite = Sites.of('bilibili').liveSite as BiliBiliSite;
+  
+  return Response.ok(jsonEncode({
+    'bilibili': {
+      'hasCookie': settings.bilibiliCookie.value.isNotEmpty,
+      'userId': biliSite.userId,
+      'cookie': settings.bilibiliCookie.value.isNotEmpty ? '******(已设置)' : '',
+    },
+    'douyin': {
+      'hasCookie': settings.douyinCookie.value.isNotEmpty,
+      'cookie': settings.douyinCookie.value.isNotEmpty ? '******(已设置)' : '',
+    },
+    'huya': {
+      'hasCookie': settings.huyaCookie.value.isNotEmpty,
+      'cookie': settings.huyaCookie.value.isNotEmpty ? '******(已设置)' : '',
+    },
+  }), headers: {'content-type': 'application/json'});
 }
 
 /// Get stream URLs with quality options
@@ -386,6 +521,41 @@ Future<Response> _handleDanmakuWebSocket(Request request, String platform, Strin
       danmaku?.stop();
     }
   })(request);
+}
+
+/// Serve favicon with correct MIME type (supports PNG and ICO fallback)
+Future<Response> _serveFavicon(Request request) async {
+  try {
+    // Try PNG first (better browser compatibility)
+    final pngFile = File('web/favicon.png');
+    if (await pngFile.exists()) {
+      final bytes = await pngFile.readAsBytes();
+      return Response.ok(
+        bytes,
+        headers: {
+          'content-type': 'image/png',
+          'cache-control': 'public, max-age=604800', // Cache for 7 days
+        },
+      );
+    }
+    
+    // Fallback to ICO
+    final icoFile = File('web/favicon.ico');
+    if (await icoFile.exists()) {
+      final bytes = await icoFile.readAsBytes();
+      return Response.ok(
+        bytes,
+        headers: {
+          'content-type': 'image/x-icon',
+          'cache-control': 'public, max-age=604800',
+        },
+      );
+    }
+    
+    return Response.notFound('Favicon not found');
+  } catch (e) {
+    return Response.internalServerError(body: 'Error serving favicon: $e');
+  }
 }
 
 /// Initialize site cookies from saved settings

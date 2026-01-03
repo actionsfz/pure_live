@@ -27,6 +27,11 @@ const state = {
     danmakuWs: null,
     danmakuEnabled: true,
     itemsPerPage: 12, // 3 rows x 4 columns
+    // Mini player state
+    miniPlayerActive: false,
+    miniPlayerClosed: false, // User manually closed mini player for current stream
+    miniHlsPlayer: null,
+    miniFlvPlayer: null,
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -35,7 +40,9 @@ document.addEventListener('DOMContentLoaded', () => {
     initVolumeControls();
     initScrollHandlers();
     initPagination();
+    initMiniPlayer();
     loadPlatforms();
+    loadSettings();
     
     // Apply saved volume
     document.getElementById('videoElement').volume = state.volume;
@@ -51,6 +58,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('webfullscreen-btn').onclick = toggleWebFullscreen;
     document.getElementById('back-to-top').onclick = scrollToTop;
     document.getElementById('toggle-danmaku').onclick = toggleDanmaku;
+    
+    // Mini player event listeners
+    document.getElementById('mini-player-expand').onclick = expandMiniPlayer;
+    document.getElementById('mini-player-close').onclick = closeMiniPlayer;
     
     // Load popular by default
     setTimeout(() => loadPopularRooms(), 100);
@@ -211,11 +222,197 @@ function initScrollHandlers() {
     const backToTop = document.getElementById('back-to-top');
     window.addEventListener('scroll', () => {
         backToTop.classList.toggle('hidden', window.scrollY <= 500);
+        
+        // Check mini player visibility on scroll
+        checkMiniPlayerVisibility();
     });
 }
 
 function scrollToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Mini Player functionality
+function initMiniPlayer() {
+    // Make mini player draggable
+    const miniPlayer = document.getElementById('mini-player');
+    const header = miniPlayer.querySelector('.mini-player-header');
+    
+    let isDragging = false;
+    let startX, startY, initialX, initialY;
+    
+    header.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.mini-btn')) return; // Don't drag when clicking buttons
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = miniPlayer.getBoundingClientRect();
+        initialX = rect.left;
+        initialY = rect.top;
+        miniPlayer.style.transition = 'none';
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        
+        let newX = initialX + dx;
+        let newY = initialY + dy;
+        
+        // Constrain to viewport
+        const maxX = window.innerWidth - miniPlayer.offsetWidth - 10;
+        const maxY = window.innerHeight - miniPlayer.offsetHeight - 10;
+        newX = Math.max(10, Math.min(newX, maxX));
+        newY = Math.max(10, Math.min(newY, maxY));
+        
+        miniPlayer.style.right = 'auto';
+        miniPlayer.style.bottom = 'auto';
+        miniPlayer.style.left = newX + 'px';
+        miniPlayer.style.top = newY + 'px';
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            miniPlayer.style.transition = '';
+        }
+    });
+    
+    // Click on mini player video to unmute/toggle
+    const miniVideo = document.getElementById('miniVideoElement');
+    miniVideo.addEventListener('click', () => {
+        miniVideo.muted = !miniVideo.muted;
+    });
+}
+
+function checkMiniPlayerVisibility() {
+    const playerContainer = document.getElementById('player-container');
+    
+    // Only check if player is active and not manually closed
+    if (playerContainer.classList.contains('hidden') || 
+        state.isWebFullscreen || 
+        state.miniPlayerClosed) {
+        return;
+    }
+    
+    const rect = playerContainer.getBoundingClientRect();
+    const isPlayerVisible = rect.bottom > 0 && rect.top < window.innerHeight;
+    
+    if (!isPlayerVisible && !state.miniPlayerActive) {
+        showMiniPlayer();
+    } else if (isPlayerVisible && state.miniPlayerActive) {
+        hideMiniPlayer();
+    }
+}
+
+function showMiniPlayer() {
+    if (!state.currentStreamData || !state.currentStreamData.urls || state.currentStreamData.urls.length === 0) {
+        return;
+    }
+    
+    state.miniPlayerActive = true;
+    const miniPlayer = document.getElementById('mini-player');
+    const miniVideo = document.getElementById('miniVideoElement');
+    const miniTitle = document.getElementById('mini-player-title');
+    
+    // Reset position when showing
+    miniPlayer.style.right = '30px';
+    miniPlayer.style.bottom = '100px';
+    miniPlayer.style.left = 'auto';
+    miniPlayer.style.top = 'auto';
+    
+    // Set title
+    miniTitle.textContent = state.currentRoom?.title || '直播中';
+    
+    // Get current stream URL
+    const lineIndex = parseInt(document.getElementById('line-select').value) || 0;
+    const url = state.currentStreamData.urls[lineIndex] || state.currentStreamData.urls[0];
+    
+    // Play in mini player
+    playMiniPlayerVideo(url);
+    
+    // Show mini player with animation
+    miniPlayer.classList.remove('hidden', 'hiding');
+}
+
+function hideMiniPlayer() {
+    if (!state.miniPlayerActive) return;
+    
+    const miniPlayer = document.getElementById('mini-player');
+    miniPlayer.classList.add('hiding');
+    
+    setTimeout(() => {
+        destroyMiniPlayers();
+        miniPlayer.classList.add('hidden');
+        miniPlayer.classList.remove('hiding');
+        state.miniPlayerActive = false;
+    }, 280);
+}
+
+function closeMiniPlayer() {
+    state.miniPlayerClosed = true;
+    hideMiniPlayer();
+}
+
+function expandMiniPlayer() {
+    // Scroll to main player
+    const playerContainer = document.getElementById('player-container');
+    playerContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // Hide mini player
+    hideMiniPlayer();
+}
+
+function playMiniPlayerVideo(url) {
+    const miniVideo = document.getElementById('miniVideoElement');
+    
+    destroyMiniPlayers();
+    
+    miniVideo.src = '';
+    miniVideo.muted = true; // Start muted to allow autoplay
+    
+    const isHls = url.includes('.m3u8') || url.includes('m3u8');
+    const isFlv = url.includes('.flv') || url.includes('flv');
+    
+    if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
+        state.miniHlsPlayer = new Hls({ 
+            maxBufferLength: 10, 
+            maxMaxBufferLength: 30,
+            enableWorker: false 
+        });
+        state.miniHlsPlayer.loadSource(url);
+        state.miniHlsPlayer.attachMedia(miniVideo);
+        state.miniHlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => miniVideo.play().catch(() => {}));
+    } else if (isFlv && typeof flvjs !== 'undefined' && flvjs.isSupported()) {
+        state.miniFlvPlayer = flvjs.createPlayer({ 
+            type: 'flv', 
+            url: url, 
+            isLive: true,
+            enableWorker: false 
+        });
+        state.miniFlvPlayer.attachMediaElement(miniVideo);
+        state.miniFlvPlayer.load();
+        state.miniFlvPlayer.play();
+    } else {
+        miniVideo.src = url;
+        miniVideo.play().catch(() => {});
+    }
+}
+
+function destroyMiniPlayers() {
+    if (state.miniHlsPlayer) {
+        state.miniHlsPlayer.destroy();
+        state.miniHlsPlayer = null;
+    }
+    if (state.miniFlvPlayer) {
+        state.miniFlvPlayer.destroy();
+        state.miniFlvPlayer = null;
+    }
+    const miniVideo = document.getElementById('miniVideoElement');
+    if (miniVideo) {
+        miniVideo.src = '';
+    }
 }
 
 // Picture in Picture
@@ -580,6 +777,9 @@ async function playStream() {
             return;
         }
         
+        // Reset mini player state for new stream
+        state.miniPlayerClosed = false;
+        
         state.currentRoom = data.room;
         state.currentStreamData = data;
         
@@ -671,6 +871,11 @@ async function changeQuality() {
                 lineSelect.style.display = 'none';
             }
             playVideoUrl(data.urls[0]);
+            
+            // Update mini player if active
+            if (state.miniPlayerActive) {
+                playMiniPlayerVideo(data.urls[0]);
+            }
         }
     } catch (e) {
         console.error('切换画质失败:', e);
@@ -681,6 +886,11 @@ function changeLine() {
     const lineIndex = parseInt(document.getElementById('line-select').value);
     if (state.currentStreamData?.urls?.[lineIndex]) {
         playVideoUrl(state.currentStreamData.urls[lineIndex]);
+        
+        // Update mini player if active
+        if (state.miniPlayerActive) {
+            playMiniPlayerVideo(state.currentStreamData.urls[lineIndex]);
+        }
     }
 }
 
@@ -691,6 +901,12 @@ function closePlayer() {
     if (state.isWebFullscreen) toggleWebFullscreen();
     if (state.hlsPlayer) { state.hlsPlayer.destroy(); state.hlsPlayer = null; }
     if (state.flvPlayer) { state.flvPlayer.destroy(); state.flvPlayer = null; }
+    
+    // Close and cleanup mini player
+    destroyMiniPlayers();
+    document.getElementById('mini-player').classList.add('hidden');
+    state.miniPlayerActive = false;
+    state.miniPlayerClosed = false;
     
     disconnectDanmaku();
     
@@ -828,6 +1044,30 @@ async function toggleFavorite() {
 }
 
 // Settings
+async function loadSettings() {
+    try {
+        const res = await fetch(`${apiBase}/settings`);
+        const settings = await res.json();
+        
+        // Update bilibili login status
+        if (settings.bilibili.hasCookie) {
+            document.getElementById('bilibili-login-status').textContent = 
+                settings.bilibili.userId ? `已登录 (UID: ${settings.bilibili.userId})` : '已设置Cookie';
+            document.getElementById('bilibili-cookie').placeholder = settings.bilibili.cookie || '已设置';
+        }
+        
+        // Update other cookie fields
+        if (settings.douyin.hasCookie) {
+            document.getElementById('douyin-cookie').placeholder = settings.douyin.cookie || '已设置';
+        }
+        if (settings.huya.hasCookie) {
+            document.getElementById('huya-cookie').placeholder = settings.huya.cookie || '已设置';
+        }
+    } catch (e) {
+        console.error('Failed to load settings:', e);
+    }
+}
+
 async function saveCookie(platform) {
     const input = document.getElementById(`${platform}-cookie`);
     const cookie = input.value;
@@ -839,6 +1079,7 @@ async function saveCookie(platform) {
             body: JSON.stringify({ platform, cookie })
         });
         alert('保存成功！');
+        loadSettings(); // Reload settings to update display
     } catch (e) {
         alert('保存失败: ' + e.message);
     }

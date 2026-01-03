@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pure Live</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/favicon.png">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -24,6 +27,20 @@
 
         <!-- Back to top button -->
         <button id="back-to-top" class="hidden" title="返回顶部">↑</button>
+
+        <!-- Mini Player (Picture in Picture for scrolling) -->
+        <div id="mini-player" class="hidden">
+            <div class="mini-player-header">
+                <span id="mini-player-title">直播中</span>
+                <div class="mini-player-controls">
+                    <button id="mini-player-expand" class="mini-btn" title="返回主播放器">⬆</button>
+                    <button id="mini-player-close" class="mini-btn" title="关闭小窗">×</button>
+                </div>
+            </div>
+            <div class="mini-player-video-wrapper">
+                <video id="miniVideoElement" muted></video>
+            </div>
+        </div>
 
         <main id="main-content">
             <!-- Main Player Container with Danmaku -->
