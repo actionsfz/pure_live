@@ -4,12 +4,16 @@ const apiBase = '/api';
 const state = {
     currentPlatform: 'bilibili',
     popularPage: 1,
-    popularHasMore: true,
+    popularTotalPages: 1,
+    popularData: [],
     popularLoading: false,
+    popularRetried: false,
     categoryPlatform: 'bilibili',
     categoryPage: 1,
-    categoryHasMore: true,
+    categoryTotalPages: 1,
+    categoryData: [],
     categoryLoading: false,
+    categoryRetried: false,
     currentArea: null,
     currentRoom: null,
     currentStreamData: null,
@@ -17,8 +21,11 @@ const state = {
     hlsPlayer: null,
     flvPlayer: null,
     volume: parseFloat(localStorage.getItem('playerVolume') || '1'),
-    isMiniMode: false,
+    isWebFullscreen: false,
     controlsTimeout: null,
+    danmakuWs: null,
+    danmakuEnabled: true,
+    itemsPerPage: 12, // 3 rows x 4 columns
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -26,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initPlayerControls();
     initVolumeControls();
     initScrollHandlers();
-    initInfiniteScroll();
+    initPagination();
     loadPlatforms();
     
     // Apply saved volume
@@ -40,9 +47,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('quality-select').onchange = changeQuality;
     document.getElementById('line-select').onchange = changeLine;
     document.getElementById('pip-btn').onclick = togglePictureInPicture;
+    document.getElementById('webfullscreen-btn').onclick = toggleWebFullscreen;
     document.getElementById('back-to-top').onclick = scrollToTop;
-    document.getElementById('expand-player').onclick = expandFromMini;
-    document.getElementById('close-mini-player').onclick = closePlayer;
+    document.getElementById('toggle-danmaku').onclick = toggleDanmaku;
     
     // Load popular by default
     setTimeout(() => loadPopularRooms(), 100);
@@ -65,7 +72,7 @@ function initNavigation() {
         document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('active'));
         document.getElementById(`nav-${name}`).classList.add('active');
 
-        if (name === 'popular' && document.getElementById('popular-grid').children.length === 0) {
+        if (name === 'popular' && state.popularData.length === 0) {
             loadPopularRooms();
         }
         if (name === 'categories' && document.getElementById('category-list').children.length === 0) {
@@ -95,32 +102,18 @@ function initPlayerControls() {
     }
     
     function hideControls() {
-        if (!state.isMiniMode) {
-            overlay.classList.add('hidden-controls');
-        }
+        overlay.classList.add('hidden-controls');
     }
     
-    // Mouse move shows controls
     playerWrapper.addEventListener('mousemove', showControls);
-    
-    // Mouse leave starts hide timer
     playerWrapper.addEventListener('mouseleave', () => {
         clearTimeout(state.controlsTimeout);
         state.controlsTimeout = setTimeout(hideControls, 2000);
     });
-    
-    // Click on video shows controls
     playerWrapper.addEventListener('click', (e) => {
-        if (e.target.tagName === 'VIDEO') {
-            showControls();
-        }
+        if (e.target.tagName === 'VIDEO') showControls();
     });
-    
-    // Prevent hiding when interacting with controls
-    overlay.addEventListener('mouseenter', () => {
-        clearTimeout(state.controlsTimeout);
-    });
-    
+    overlay.addEventListener('mouseenter', () => clearTimeout(state.controlsTimeout));
     overlay.addEventListener('mouseleave', () => {
         state.controlsTimeout = setTimeout(hideControls, 3000);
     });
@@ -148,7 +141,6 @@ function initVolumeControls() {
         showVolumeIndicator(newVol);
     }
 
-    // Keyboard controls
     document.addEventListener('keydown', (e) => {
         if (document.getElementById('player-container').classList.contains('hidden')) return;
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
@@ -159,10 +151,11 @@ function initVolumeControls() {
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             adjustVolume(-0.05);
+        } else if (e.key === 'Escape' && state.isWebFullscreen) {
+            toggleWebFullscreen();
         }
     });
 
-    // Mouse wheel on player
     const playerWrapper = document.getElementById('player-wrapper');
     if (playerWrapper) {
         playerWrapper.addEventListener('wheel', (e) => {
@@ -173,61 +166,23 @@ function initVolumeControls() {
     }
 }
 
+// Web Fullscreen
+function toggleWebFullscreen() {
+    state.isWebFullscreen = !state.isWebFullscreen;
+    document.getElementById('app-container').classList.toggle('webfullscreen', state.isWebFullscreen);
+    document.getElementById('webfullscreen-btn').textContent = state.isWebFullscreen ? '⛶' : '⛶';
+}
+
 // Scroll handlers
 function initScrollHandlers() {
     const backToTop = document.getElementById('back-to-top');
-
     window.addEventListener('scroll', () => {
-        const scrollY = window.scrollY;
-        
-        // Show/hide back to top
-        if (scrollY > 500) {
-            backToTop.classList.remove('hidden');
-        } else {
-            backToTop.classList.add('hidden');
-        }
-        
-        // Mini player mode logic
-        const playerContainer = document.getElementById('player-container');
-        if (!playerContainer.classList.contains('hidden') && state.currentRoom) {
-            const playerRect = playerContainer.getBoundingClientRect();
-            const shouldBeMini = playerRect.bottom < -50;
-            
-            if (shouldBeMini && !state.isMiniMode) {
-                enterMiniMode();
-            } else if (!shouldBeMini && state.isMiniMode) {
-                exitMiniMode();
-            }
-        }
+        backToTop.classList.toggle('hidden', window.scrollY <= 500);
     });
 }
 
 function scrollToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function enterMiniMode() {
-    state.isMiniMode = true;
-    const playerContainer = document.getElementById('player-container');
-    const miniPlayer = document.getElementById('mini-player');
-    
-    playerContainer.classList.add('mini-mode');
-    miniPlayer.classList.remove('hidden');
-    document.getElementById('mini-player-title').textContent = state.currentRoom?.title || '直播中';
-}
-
-function exitMiniMode() {
-    state.isMiniMode = false;
-    const playerContainer = document.getElementById('player-container');
-    const miniPlayer = document.getElementById('mini-player');
-    
-    playerContainer.classList.remove('mini-mode');
-    miniPlayer.classList.add('hidden');
-}
-
-function expandFromMini() {
-    exitMiniMode();
-    scrollToTop();
 }
 
 // Picture in Picture
@@ -241,8 +196,15 @@ async function togglePictureInPicture() {
         }
     } catch (e) {
         console.error('PiP error:', e);
-        alert('画中画功能不可用');
     }
+}
+
+// Pagination
+function initPagination() {
+    document.getElementById('popular-prev').onclick = () => { if (state.popularPage > 1) { state.popularPage--; renderPopularPage(); } };
+    document.getElementById('popular-next').onclick = () => { if (state.popularPage < state.popularTotalPages) { state.popularPage++; renderPopularPage(); } };
+    document.getElementById('category-prev').onclick = () => { if (state.categoryPage > 1) { state.categoryPage--; renderCategoryPage(); } };
+    document.getElementById('category-next').onclick = () => { if (state.categoryPage < state.categoryTotalPages) { state.categoryPage++; renderCategoryPage(); } };
 }
 
 // Load platforms
@@ -252,7 +214,6 @@ async function loadPlatforms() {
         const data = await res.json();
         state.platforms = data.platforms;
     } catch (e) {
-        console.error('Failed to load platforms:', e);
         state.platforms = [
             { id: 'bilibili', name: '哔哩' },
             { id: 'douyu', name: '斗鱼' },
@@ -280,11 +241,9 @@ function renderPlatformTabs() {
         tab.onclick = () => {
             state.currentPlatform = tab.dataset.platform;
             state.popularPage = 1;
-            state.popularHasMore = true;
+            state.popularData = [];
             popularTabs.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            document.getElementById('popular-grid').innerHTML = '';
-            document.getElementById('popular-error').classList.add('hidden');
             loadPopularRooms();
         };
     });
@@ -301,55 +260,83 @@ function renderPlatformTabs() {
     });
 }
 
-// Popular rooms with better error handling
+// Popular rooms with pagination
 async function loadPopularRooms() {
-    if (state.popularLoading || !state.popularHasMore) return;
+    if (state.popularLoading) return;
     
     state.popularLoading = true;
     const loading = document.getElementById('popular-loading');
     const error = document.getElementById('popular-error');
+    const grid = document.getElementById('popular-grid');
+    
     loading.classList.remove('hidden');
     error.classList.add('hidden');
+    grid.innerHTML = '';
     
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+        // Load multiple pages to have enough data
+        const allItems = [];
+        let page = 1;
+        let hasMore = true;
         
-        const res = await fetch(`${apiBase}/popular/${state.currentPlatform}?page=${state.popularPage}`, {
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        if (!res.ok) throw new Error('Failed to load');
-        const data = await res.json();
-        
-        const grid = document.getElementById('popular-grid');
-        if (data.items && data.items.length > 0) {
-            data.items.forEach(room => {
-                grid.appendChild(createRoomCard(room));
-            });
-            state.popularHasMore = data.hasMore;
-            state.popularPage++;
-        } else if (state.popularPage === 1) {
-            grid.innerHTML = '<p class="empty-message">暂无直播</p>';
-            state.popularHasMore = false;
+        while (hasMore && allItems.length < 100) {
+            const res = await fetch(`${apiBase}/popular/${state.currentPlatform}?page=${page}`);
+            if (!res.ok) throw new Error('Failed to load');
+            const data = await res.json();
+            
+            if (data.items && data.items.length > 0) {
+                allItems.push(...data.items);
+                hasMore = data.hasMore;
+                page++;
+            } else {
+                hasMore = false;
+            }
+            
+            // Limit to 3 API requests
+            if (page > 3) break;
         }
+        
+        state.popularData = allItems;
+        state.popularTotalPages = Math.ceil(allItems.length / state.itemsPerPage);
+        state.popularPage = 1;
+        
+        renderPopularPage();
     } catch (e) {
         console.error('Failed to load popular rooms:', e);
-        if (state.popularPage === 1) {
-            error.classList.remove('hidden');
+        // If bilibili fails, try resetting cache and retry once
+        if (state.currentPlatform === 'bilibili' && !state.popularRetried) {
+            state.popularRetried = true;
+            console.log('Resetting Bilibili cache and retrying...');
+            await fetch(`${apiBase}/reset-cache/bilibili`);
+            state.popularLoading = false;
+            return loadPopularRooms();
         }
+        state.popularRetried = false;
+        error.classList.remove('hidden');
     } finally {
         state.popularLoading = false;
         loading.classList.add('hidden');
     }
 }
 
+function renderPopularPage() {
+    const grid = document.getElementById('popular-grid');
+    const start = (state.popularPage - 1) * state.itemsPerPage;
+    const end = start + state.itemsPerPage;
+    const pageItems = state.popularData.slice(start, end);
+    
+    grid.innerHTML = '';
+    pageItems.forEach(room => grid.appendChild(createRoomCard(room)));
+    
+    // Update pagination
+    document.getElementById('popular-page-info').textContent = `第 ${state.popularPage} / ${state.popularTotalPages} 页`;
+    document.getElementById('popular-prev').disabled = state.popularPage <= 1;
+    document.getElementById('popular-next').disabled = state.popularPage >= state.popularTotalPages;
+}
+
 function retryLoadPopular() {
     document.getElementById('popular-error').classList.add('hidden');
-    state.popularPage = 1;
-    state.popularHasMore = true;
-    document.getElementById('popular-grid').innerHTML = '';
+    state.popularData = [];
     loadPopularRooms();
 }
 
@@ -359,14 +346,7 @@ async function loadCategories() {
     list.innerHTML = '<div class="loading-indicator"><div class="spinner"></div><span>加载中...</span></div>';
     
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-        
-        const res = await fetch(`${apiBase}/categories/${state.categoryPlatform}`, {
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
+        const res = await fetch(`${apiBase}/categories/${state.categoryPlatform}`);
         if (!res.ok) throw new Error('Failed to load');
         const data = await res.json();
         
@@ -377,10 +357,7 @@ async function loadCategories() {
                 if (category.children && category.children.length > 0) {
                     const card = document.createElement('div');
                     card.className = 'category-card';
-                    card.innerHTML = `
-                        <h4>${category.name}</h4>
-                        <span>${category.children.length} 个子分类</span>
-                    `;
+                    card.innerHTML = `<h4>${category.name}</h4><span>${category.children.length} 个子分类</span>`;
                     card.onclick = () => showSubCategories(category);
                     list.appendChild(card);
                 }
@@ -391,7 +368,6 @@ async function loadCategories() {
             list.innerHTML = '<p class="empty-message">暂无分类</p>';
         }
     } catch (e) {
-        console.error('Failed to load categories:', e);
         list.innerHTML = '<div class="error-message"><span>加载失败</span><button onclick="loadCategories()">重试</button></div>';
     }
 }
@@ -403,8 +379,9 @@ function showSubCategories(category) {
     category.children.forEach(area => {
         const item = document.createElement('div');
         item.className = 'category-item';
+        const imgSrc = area.areaPic ? getCoverUrl(area.areaPic, state.categoryPlatform) : '';
         item.innerHTML = `
-            <img src="${area.areaPic || ''}" alt="" onerror="this.style.background='var(--surface-hover)'">
+            ${imgSrc ? `<img src="${imgSrc}" alt="" onerror="this.style.background='var(--surface-hover)'">` : '<div style="width:48px;height:48px;background:var(--surface-hover);border-radius:8px;"></div>'}
             <div class="category-item-info">
                 <h4>${area.areaName || area.typeName || '未知分类'}</h4>
                 <span>${category.name}</span>
@@ -418,7 +395,7 @@ function showSubCategories(category) {
 async function loadCategoryRooms(area) {
     state.currentArea = area;
     state.categoryPage = 1;
-    state.categoryHasMore = true;
+    state.categoryData = [];
     
     document.getElementById('category-list').classList.add('hidden');
     document.getElementById('category-rooms-container').classList.remove('hidden');
@@ -430,53 +407,67 @@ async function loadCategoryRooms(area) {
 }
 
 async function fetchCategoryRooms() {
-    if (state.categoryLoading || !state.categoryHasMore || !state.currentArea) return;
+    if (state.categoryLoading || !state.currentArea) return;
     
     state.categoryLoading = true;
     const loading = document.getElementById('category-loading');
     const error = document.getElementById('category-error');
+    
     loading.classList.remove('hidden');
     
     try {
         const area = state.currentArea;
-        const url = `${apiBase}/category/${state.categoryPlatform}/${encodeURIComponent(area.areaType || '')}/${encodeURIComponent(area.areaId || '')}?page=${state.categoryPage}&areaName=${encodeURIComponent(area.areaName || '')}`;
+        const allItems = [];
+        let page = 1;
+        let hasMore = true;
         
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-        
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        
-        if (!res.ok) throw new Error('Failed to load');
-        const data = await res.json();
-        
-        const grid = document.getElementById('category-rooms-grid');
-        if (data.items && data.items.length > 0) {
-            data.items.forEach(room => {
-                grid.appendChild(createRoomCard(room));
-            });
-            state.categoryHasMore = data.hasMore;
-            state.categoryPage++;
-        } else if (state.categoryPage === 1) {
-            grid.innerHTML = '<p class="empty-message">暂无直播</p>';
-            state.categoryHasMore = false;
+        while (hasMore && allItems.length < 100) {
+            const url = `${apiBase}/category/${state.categoryPlatform}/${encodeURIComponent(area.areaType || '')}/${encodeURIComponent(area.areaId || '')}?page=${page}&areaName=${encodeURIComponent(area.areaName || '')}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Failed to load');
+            const data = await res.json();
+            
+            if (data.items && data.items.length > 0) {
+                allItems.push(...data.items);
+                hasMore = data.hasMore;
+                page++;
+            } else {
+                hasMore = false;
+            }
+            
+            if (page > 3) break;
         }
+        
+        state.categoryData = allItems;
+        state.categoryTotalPages = Math.ceil(allItems.length / state.itemsPerPage);
+        state.categoryPage = 1;
+        
+        renderCategoryPage();
     } catch (e) {
-        console.error('Failed to load category rooms:', e);
-        if (state.categoryPage === 1) {
-            error.classList.remove('hidden');
-        }
+        error.classList.remove('hidden');
     } finally {
         state.categoryLoading = false;
         loading.classList.add('hidden');
     }
 }
 
+function renderCategoryPage() {
+    const grid = document.getElementById('category-rooms-grid');
+    const start = (state.categoryPage - 1) * state.itemsPerPage;
+    const end = start + state.itemsPerPage;
+    const pageItems = state.categoryData.slice(start, end);
+    
+    grid.innerHTML = '';
+    pageItems.forEach(room => grid.appendChild(createRoomCard(room)));
+    
+    document.getElementById('category-page-info').textContent = `第 ${state.categoryPage} / ${state.categoryTotalPages} 页`;
+    document.getElementById('category-prev').disabled = state.categoryPage <= 1;
+    document.getElementById('category-next').disabled = state.categoryPage >= state.categoryTotalPages;
+}
+
 function retryLoadCategory() {
     document.getElementById('category-error').classList.add('hidden');
-    state.categoryPage = 1;
-    state.categoryHasMore = true;
-    document.getElementById('category-rooms-grid').innerHTML = '';
+    state.categoryData = [];
     fetchCategoryRooms();
 }
 
@@ -486,18 +477,29 @@ function showCategoryList() {
     document.getElementById('category-list').classList.remove('hidden');
 }
 
-// Room card with better image handling
+// Cover URL helper - use proxy for bilibili
+function getCoverUrl(url, platform) {
+    if (!url) return '';
+    
+    // Use image proxy for bilibili to bypass referrer restrictions
+    if (platform === 'bilibili' && (url.includes('hdslb.com') || url.includes('bilibili'))) {
+        return `${apiBase}/image?url=${encodeURIComponent(url)}`;
+    }
+    
+    return url;
+}
+
+// Room card with fixed cover loading
 function createRoomCard(room) {
     const card = document.createElement('div');
     card.className = 'card';
     
     const isLive = room.liveStatus === 0 || room.status === true;
-    const cover = room.cover || '';
+    const cover = getCoverUrl(room.cover, room.platform);
     
     card.innerHTML = `
         <div class="card-cover">
-            ${cover ? `<img src="${cover}" alt="" loading="lazy" onload="this.style.opacity=1" onerror="this.classList.add('loading-error')">` : ''}
-            <div class="cover-placeholder">${room.nick || '直播间'}</div>
+            ${cover ? `<img src="${cover}" alt="" loading="lazy">` : ''}
             ${isLive ? '<span class="live-badge">直播中</span>' : ''}
             ${room.watching ? `<span class="viewer-count">${formatViewers(room.watching)}</span>` : ''}
         </div>
@@ -511,13 +513,6 @@ function createRoomCard(room) {
         </div>
     `;
     
-    // Style the image
-    const img = card.querySelector('img');
-    if (img) {
-        img.style.opacity = '0';
-        img.style.transition = 'opacity 0.3s';
-    }
-    
     card.onclick = () => openRoom(room);
     return card;
 }
@@ -526,9 +521,7 @@ function formatViewers(count) {
     if (!count) return '';
     const num = parseInt(count);
     if (isNaN(num)) return count;
-    if (num >= 10000) {
-        return (num / 10000).toFixed(1) + '万';
-    }
+    if (num >= 10000) return (num / 10000).toFixed(1) + '万';
     return num.toLocaleString();
 }
 
@@ -580,9 +573,7 @@ async function playStream() {
         // Populate line selector
         const lineSelect = document.getElementById('line-select');
         if (data.urls && data.urls.length > 1) {
-            lineSelect.innerHTML = data.urls.map((_, i) => 
-                `<option value="${i}">线路 ${i + 1}</option>`
-            ).join('');
+            lineSelect.innerHTML = data.urls.map((_, i) => `<option value="${i}">线路 ${i + 1}</option>`).join('');
             lineSelect.style.display = 'block';
         } else {
             lineSelect.style.display = 'none';
@@ -591,9 +582,12 @@ async function playStream() {
         // Check favorite status
         await updateFavoriteButton(platform, roomId);
         
-        // Show player and scroll to top
+        // Show player
         document.getElementById('player-container').classList.remove('hidden');
         scrollToTop();
+        
+        // Connect danmaku
+        connectDanmaku(platform, roomId);
         
         // Play stream
         if (data.urls && data.urls.length > 0) {
@@ -610,50 +604,28 @@ async function playStream() {
 function playVideoUrl(url) {
     const videoElement = document.getElementById('videoElement');
     
-    // Cleanup previous players
-    if (state.hlsPlayer) {
-        state.hlsPlayer.destroy();
-        state.hlsPlayer = null;
-    }
-    if (state.flvPlayer) {
-        state.flvPlayer.destroy();
-        state.flvPlayer = null;
-    }
+    if (state.hlsPlayer) { state.hlsPlayer.destroy(); state.hlsPlayer = null; }
+    if (state.flvPlayer) { state.flvPlayer.destroy(); state.flvPlayer = null; }
     
     videoElement.src = '';
     videoElement.volume = state.volume;
     
-    // Detect stream type
     const isHls = url.includes('.m3u8') || url.includes('m3u8');
     const isFlv = url.includes('.flv') || url.includes('flv');
     
     if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
-        state.hlsPlayer = new Hls({
-            maxBufferLength: 30,
-            maxMaxBufferLength: 60,
-        });
+        state.hlsPlayer = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 });
         state.hlsPlayer.loadSource(url);
         state.hlsPlayer.attachMedia(videoElement);
-        state.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-            videoElement.play().catch(e => console.log('自动播放被阻止:', e));
-        });
-        state.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
-            if (data.fatal) {
-                console.error('HLS fatal error:', data);
-            }
-        });
+        state.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => videoElement.play().catch(() => {}));
     } else if (isFlv && typeof flvjs !== 'undefined' && flvjs.isSupported()) {
-        state.flvPlayer = flvjs.createPlayer({
-            type: 'flv',
-            url: url,
-            isLive: true,
-        });
+        state.flvPlayer = flvjs.createPlayer({ type: 'flv', url: url, isLive: true });
         state.flvPlayer.attachMediaElement(videoElement);
         state.flvPlayer.load();
         state.flvPlayer.play();
     } else {
         videoElement.src = url;
-        videoElement.play().catch(e => console.log('播放错误:', e));
+        videoElement.play().catch(() => {});
     }
 }
 
@@ -668,18 +640,13 @@ async function changeQuality() {
         
         if (data.success && data.urls && data.urls.length > 0) {
             state.currentStreamData = data;
-            
-            // Update line selector
             const lineSelect = document.getElementById('line-select');
             if (data.urls.length > 1) {
-                lineSelect.innerHTML = data.urls.map((_, i) => 
-                    `<option value="${i}">线路 ${i + 1}</option>`
-                ).join('');
+                lineSelect.innerHTML = data.urls.map((_, i) => `<option value="${i}">线路 ${i + 1}</option>`).join('');
                 lineSelect.style.display = 'block';
             } else {
                 lineSelect.style.display = 'none';
             }
-            
             playVideoUrl(data.urls[0]);
         }
     } catch (e) {
@@ -689,33 +656,89 @@ async function changeQuality() {
 
 function changeLine() {
     const lineIndex = parseInt(document.getElementById('line-select').value);
-    if (state.currentStreamData && state.currentStreamData.urls && state.currentStreamData.urls[lineIndex]) {
+    if (state.currentStreamData?.urls?.[lineIndex]) {
         playVideoUrl(state.currentStreamData.urls[lineIndex]);
     }
 }
 
 function closePlayer() {
-    const playerContainer = document.getElementById('player-container');
-    const videoElement = document.getElementById('videoElement');
+    document.getElementById('player-container').classList.add('hidden');
+    document.getElementById('videoElement').pause();
     
-    // Exit mini mode first
-    exitMiniMode();
+    if (state.isWebFullscreen) toggleWebFullscreen();
+    if (state.hlsPlayer) { state.hlsPlayer.destroy(); state.hlsPlayer = null; }
+    if (state.flvPlayer) { state.flvPlayer.destroy(); state.flvPlayer = null; }
     
-    playerContainer.classList.add('hidden');
-    videoElement.pause();
+    disconnectDanmaku();
     
-    if (state.hlsPlayer) {
-        state.hlsPlayer.destroy();
-        state.hlsPlayer = null;
-    }
-    if (state.flvPlayer) {
-        state.flvPlayer.destroy();
-        state.flvPlayer = null;
-    }
-    
-    videoElement.src = '';
+    document.getElementById('videoElement').src = '';
     state.currentRoom = null;
     state.currentStreamData = null;
+}
+
+// Danmaku
+function connectDanmaku(platform, roomId) {
+    disconnectDanmaku();
+    
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/danmaku/${platform}/${roomId}`;
+    
+    document.getElementById('danmaku-status').textContent = '连接中...';
+    document.getElementById('danmaku-list').innerHTML = '';
+    
+    try {
+        state.danmakuWs = new WebSocket(wsUrl);
+        
+        state.danmakuWs.onopen = () => {
+            document.getElementById('danmaku-status').textContent = '已连接';
+        };
+        
+        state.danmakuWs.onmessage = (event) => {
+            if (!state.danmakuEnabled) return;
+            try {
+                const msg = JSON.parse(event.data);
+                addDanmakuMessage(msg);
+            } catch (e) {}
+        };
+        
+        state.danmakuWs.onclose = () => {
+            document.getElementById('danmaku-status').textContent = '连接已断开';
+        };
+        
+        state.danmakuWs.onerror = () => {
+            document.getElementById('danmaku-status').textContent = '弹幕暂不可用';
+        };
+    } catch (e) {
+        document.getElementById('danmaku-status').textContent = '弹幕暂不可用';
+    }
+}
+
+function disconnectDanmaku() {
+    if (state.danmakuWs) {
+        state.danmakuWs.close();
+        state.danmakuWs = null;
+    }
+}
+
+function addDanmakuMessage(msg) {
+    const list = document.getElementById('danmaku-list');
+    const item = document.createElement('div');
+    item.className = 'danmaku-item';
+    item.innerHTML = `<span class="username">${msg.userName || '匿名'}:</span><span class="message">${msg.message || ''}</span>`;
+    list.appendChild(item);
+    
+    // Keep max 200 messages
+    while (list.children.length > 200) {
+        list.removeChild(list.firstChild);
+    }
+    
+    // Auto scroll
+    list.scrollTop = list.scrollHeight;
+}
+
+function toggleDanmaku() {
+    state.danmakuEnabled = !state.danmakuEnabled;
+    document.getElementById('toggle-danmaku').style.opacity = state.danmakuEnabled ? '1' : '0.5';
 }
 
 // Favorites
@@ -735,12 +758,9 @@ async function loadFavorites() {
             emptyMsg.classList.remove('hidden');
         } else {
             emptyMsg.classList.add('hidden');
-            favorites.forEach(room => {
-                grid.appendChild(createRoomCard(room));
-            });
+            favorites.forEach(room => grid.appendChild(createRoomCard(room)));
         }
     } catch (e) {
-        console.error('Failed to load favorites:', e);
         grid.innerHTML = '<div class="error-message"><span>加载失败</span><button onclick="loadFavorites()">重试</button></div>';
     }
 }
@@ -758,9 +778,7 @@ async function updateFavoriteButton(platform, roomId) {
             btn.classList.remove('active');
             btn.querySelector('.heart-icon').textContent = '♡';
         }
-    } catch (e) {
-        console.error('Failed to check favorite status:', e);
-    }
+    } catch (e) {}
 }
 
 async function toggleFavorite() {
@@ -771,9 +789,7 @@ async function toggleFavorite() {
     
     try {
         if (isCurrentlyFavorite) {
-            await fetch(`${apiBase}/favorites/${state.currentRoom.platform}/${state.currentRoom.roomId}`, {
-                method: 'DELETE'
-            });
+            await fetch(`${apiBase}/favorites/${state.currentRoom.platform}/${state.currentRoom.roomId}`, { method: 'DELETE' });
             btn.classList.remove('active');
             btn.querySelector('.heart-icon').textContent = '♡';
         } else {
@@ -785,33 +801,7 @@ async function toggleFavorite() {
             btn.classList.add('active');
             btn.querySelector('.heart-icon').textContent = '♥';
         }
-    } catch (e) {
-        console.error('Failed to toggle favorite:', e);
-    }
-}
-
-// Infinite scroll
-function initInfiniteScroll() {
-    const options = {
-        root: null,
-        rootMargin: '300px',
-        threshold: 0
-    };
-    
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                if (entry.target.id === 'popular-loading' && !state.popularLoading && state.popularHasMore) {
-                    loadPopularRooms();
-                } else if (entry.target.id === 'category-loading' && !state.categoryLoading && state.categoryHasMore) {
-                    fetchCategoryRooms();
-                }
-            }
-        });
-    }, options);
-
-    observer.observe(document.getElementById('popular-loading'));
-    observer.observe(document.getElementById('category-loading'));
+    } catch (e) {}
 }
 
 // Settings

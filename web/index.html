@@ -10,8 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/flv.js/dist/flv.min.js"></script>
 </head>
 <body>
-    <div class="app-container">
-        <header class="navbar">
+    <div class="app-container" id="app-container">
+        <header class="navbar" id="navbar">
             <div class="logo">Pure Live</div>
             <nav>
                 <button id="nav-popular" class="active">热门</button>
@@ -26,41 +26,42 @@
         <button id="back-to-top" class="hidden" title="返回顶部">↑</button>
 
         <main id="main-content">
-            <!-- Main Player Container -->
+            <!-- Main Player Container with Danmaku -->
             <div id="player-container" class="hidden">
-                <div class="player-wrapper" id="player-wrapper">
-                    <video id="videoElement" controls></video>
-                    <!-- Auto-hiding overlay -->
-                    <div class="player-overlay" id="player-overlay">
-                        <div class="player-header">
-                            <div class="player-info">
-                                <span id="player-title"></span>
-                                <span id="player-streamer"></span>
-                            </div>
-                            <div class="player-controls">
-                                <select id="quality-select" title="画质"></select>
-                                <select id="line-select" title="线路"></select>
-                                <button id="pip-btn" class="icon-btn" title="画中画">⧉</button>
-                                <button id="favorite-btn" class="icon-btn" title="关注">
-                                    <span class="heart-icon">♡</span>
-                                </button>
-                                <button id="close-player" class="icon-btn" title="关闭">×</button>
+                <div class="player-with-danmaku">
+                    <div class="player-wrapper" id="player-wrapper">
+                        <video id="videoElement" controls></video>
+                        <!-- Auto-hiding overlay -->
+                        <div class="player-overlay" id="player-overlay">
+                            <div class="player-header">
+                                <div class="player-info">
+                                    <span id="player-title"></span>
+                                    <span id="player-streamer"></span>
+                                </div>
+                                <div class="player-controls">
+                                    <select id="quality-select" title="画质"></select>
+                                    <select id="line-select" title="线路"></select>
+                                    <button id="pip-btn" class="icon-btn" title="画中画">⧉</button>
+                                    <button id="webfullscreen-btn" class="icon-btn" title="网页全屏">⛶</button>
+                                    <button id="favorite-btn" class="icon-btn" title="关注">
+                                        <span class="heart-icon">♡</span>
+                                    </button>
+                                    <button id="close-player" class="icon-btn" title="关闭">×</button>
+                                </div>
                             </div>
                         </div>
+                        <div class="volume-indicator hidden" id="volume-indicator">
+                            <span id="volume-value">100%</span>
+                        </div>
                     </div>
-                    <div class="volume-indicator hidden" id="volume-indicator">
-                        <span id="volume-value">100%</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Mini Player (fixed position, uses same video) -->
-            <div id="mini-player" class="hidden">
-                <div class="mini-player-content">
-                    <span id="mini-player-title"></span>
-                    <div class="mini-player-controls">
-                        <button id="expand-player" class="icon-btn-sm" title="返回">↗</button>
-                        <button id="close-mini-player" class="icon-btn-sm" title="关闭">×</button>
+                    <!-- Danmaku Panel -->
+                    <div class="danmaku-panel" id="danmaku-panel">
+                        <div class="danmaku-header">
+                            <span>弹幕</span>
+                            <button id="toggle-danmaku" class="icon-btn-sm" title="开关弹幕">💬</button>
+                        </div>
+                        <div class="danmaku-list" id="danmaku-list"></div>
+                        <div class="danmaku-status" id="danmaku-status">等待连接...</div>
                     </div>
                 </div>
             </div>
@@ -70,6 +71,11 @@
                 <h2>热门直播</h2>
                 <div id="platform-tabs" class="platform-tabs"></div>
                 <div id="popular-grid" class="grid"></div>
+                <div class="pagination" id="popular-pagination">
+                    <button id="popular-prev" class="page-btn" disabled>◀ 上一页</button>
+                    <span id="popular-page-info">第 1 页</span>
+                    <button id="popular-next" class="page-btn">下一页 ▶</button>
+                </div>
                 <div id="popular-loading" class="loading-indicator hidden">
                     <div class="spinner"></div>
                     <span>加载中...</span>
@@ -89,6 +95,11 @@
                     <button id="back-to-categories" class="back-btn">← 返回分类</button>
                     <h3 id="category-title"></h3>
                     <div id="category-rooms-grid" class="grid"></div>
+                    <div class="pagination" id="category-pagination">
+                        <button id="category-prev" class="page-btn" disabled>◀ 上一页</button>
+                        <span id="category-page-info">第 1 页</span>
+                        <button id="category-next" class="page-btn">下一页 ▶</button>
+                    </div>
                     <div id="category-loading" class="loading-indicator hidden">
                         <div class="spinner"></div>
                         <span>加载中...</span>

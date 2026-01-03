@@ -6,9 +6,12 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_static/shelf_static.dart';
+import 'package:shelf_web_socket/shelf_web_socket.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:pure_live/core/interface/app_settings.dart';
 import 'package:pure_live/core/sites.dart';
+import 'package:pure_live/core/site/bilibili_site.dart';
 import 'package:pure_live/server/server_settings.dart';
 
 import 'package:pure_live/common/models/index.dart';
@@ -34,6 +37,11 @@ void main(List<String> args) async {
   router.delete('/api/favorites/<platform>/<roomId>', _removeFavorite);
   router.post('/api/settings/cookie', _updateCookie);
   router.get('/api/platforms', _getPlatforms);
+  router.get('/api/image', _proxyImage);
+  router.get('/api/reset-cache/<platform>', _resetPlatformCache);
+  
+  // WebSocket for danmaku
+  router.get('/ws/danmaku/<platform>/<roomId>', _handleDanmakuWebSocket);
 
   // Serve Web Frontend
   // Assuming 'web' directory is in the root of the execution context
@@ -245,4 +253,123 @@ Future<Response> _getPlatforms(Request request) async {
       .map((s) => {'id': s.id, 'name': s.name})
       .toList();
   return Response.ok(jsonEncode({'platforms': platforms}), headers: {'content-type': 'application/json'});
+}
+
+/// Proxy image to bypass referrer restrictions
+Future<Response> _proxyImage(Request request) async {
+  try {
+    final imageUrl = request.url.queryParameters['url'];
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return Response.badRequest(body: 'Missing url parameter');
+    }
+    
+    final uri = Uri.parse(imageUrl);
+    final client = HttpClient();
+    final httpRequest = await client.getUrl(uri);
+    
+    // Set headers to bypass referrer checks
+    httpRequest.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    httpRequest.headers.set('Referer', '${uri.scheme}://${uri.host}/');
+    
+    final httpResponse = await httpRequest.close();
+    final bytes = await httpResponse.fold<List<int>>([], (prev, curr) => prev..addAll(curr));
+    
+    // Determine content type
+    var contentType = httpResponse.headers.contentType?.mimeType ?? 'image/jpeg';
+    
+    return Response.ok(
+      bytes,
+      headers: {
+        'content-type': contentType,
+        'cache-control': 'public, max-age=86400', // Cache for 1 day
+      },
+    );
+  } catch (e) {
+    return Response.internalServerError(body: 'Error proxying image: $e');
+  }
+}
+
+/// Reset platform cache (for Bilibili WBI key refresh)
+Future<Response> _resetPlatformCache(Request request, String platform) async {
+  try {
+    if (platform == 'bilibili') {
+      // Reset static WBI keys
+      BiliBiliSite.kImgKey = '';
+      BiliBiliSite.kSubKey = '';
+      return Response.ok(jsonEncode({'success': true, 'message': 'Bilibili cache reset'}), 
+        headers: {'content-type': 'application/json'});
+    }
+    return Response.ok(jsonEncode({'success': true, 'message': 'No cache to reset for $platform'}), 
+      headers: {'content-type': 'application/json'});
+  } catch (e) {
+    return Response.internalServerError(body: 'Error: $e');
+  }
+}
+
+/// WebSocket handler for danmaku
+Future<Response> _handleDanmakuWebSocket(Request request, String platform, String roomId) async {
+  return webSocketHandler((WebSocketChannel webSocket) async {
+    try {
+      final site = Sites.of(platform);
+      final danmaku = site.liveSite.getDanmaku();
+      
+      // Get room detail for danmaku args
+      final room = await site.liveSite.getRoomDetail(roomId: roomId, platform: platform);
+      
+      if (room.danmakuData == null) {
+        webSocket.sink.add(jsonEncode({'type': 'error', 'message': '无法获取弹幕信息'}));
+        await webSocket.sink.close();
+        return;
+      }
+      
+      // Set up message handler
+      danmaku.onMessage = (msg) {
+        try {
+          webSocket.sink.add(jsonEncode({
+            'type': msg.type.toString().split('.').last,
+            'userName': msg.userName,
+            'message': msg.message,
+            'color': msg.color.toString(),
+          }));
+        } catch (e) {
+          // Client disconnected
+        }
+      };
+      
+      danmaku.onClose = (msg) {
+        try {
+          webSocket.sink.add(jsonEncode({'type': 'close', 'message': msg}));
+        } catch (e) {
+          // Ignore
+        }
+      };
+      
+      danmaku.onReady = () {
+        try {
+          webSocket.sink.add(jsonEncode({'type': 'ready', 'message': '弹幕已连接'}));
+        } catch (e) {
+          // Ignore
+        }
+      };
+      
+      // Start receiving danmaku
+      await danmaku.start(room.danmakuData);
+      
+      // Handle client disconnect
+      webSocket.stream.listen(
+        (message) {
+          // Handle any client messages if needed
+        },
+        onDone: () {
+          danmaku.stop();
+        },
+        onError: (e) {
+          danmaku.stop();
+        },
+      );
+    } catch (e) {
+      webSocket.sink.add(jsonEncode({'type': 'error', 'message': '弹幕连接失败: $e'}));
+      await webSocket.sink.close();
+    }
+  })(request);
 }
