@@ -8,6 +8,7 @@ const state = {
     popularData: [],
     popularLoading: false,
     popularRetried: false,
+    popularHasMore: true,
     categoryPlatform: 'bilibili',
     categoryPage: 1,
     categoryTotalPages: 1,
@@ -201,8 +202,18 @@ async function togglePictureInPicture() {
 
 // Pagination
 function initPagination() {
-    document.getElementById('popular-prev').onclick = () => { if (state.popularPage > 1) { state.popularPage--; renderPopularPage(); } };
-    document.getElementById('popular-next').onclick = () => { if (state.popularPage < state.popularTotalPages) { state.popularPage++; renderPopularPage(); } };
+    document.getElementById('popular-prev').onclick = () => { 
+        if (state.popularPage > 1) { 
+            state.popularPage--; 
+            loadPopularRooms(); 
+        } 
+    };
+    document.getElementById('popular-next').onclick = () => { 
+        if (state.popularHasMore) { 
+            state.popularPage++; 
+            loadPopularRooms(); 
+        } 
+    };
     document.getElementById('category-prev').onclick = () => { if (state.categoryPage > 1) { state.categoryPage--; renderCategoryPage(); } };
     document.getElementById('category-next').onclick = () => { if (state.categoryPage < state.categoryTotalPages) { state.categoryPage++; renderCategoryPage(); } };
 }
@@ -242,6 +253,8 @@ function renderPlatformTabs() {
             state.currentPlatform = tab.dataset.platform;
             state.popularPage = 1;
             state.popularData = [];
+            state.popularRetried = false;
+            state.popularHasMore = true;
             popularTabs.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             loadPopularRooms();
@@ -260,7 +273,7 @@ function renderPlatformTabs() {
     });
 }
 
-// Popular rooms with pagination
+// Popular rooms with on-demand pagination
 async function loadPopularRooms() {
     if (state.popularLoading) return;
     
@@ -274,31 +287,12 @@ async function loadPopularRooms() {
     grid.innerHTML = '';
     
     try {
-        // Load multiple pages to have enough data
-        const allItems = [];
-        let page = 1;
-        let hasMore = true;
+        const res = await fetch(`${apiBase}/popular/${state.currentPlatform}?page=${state.popularPage}`);
+        if (!res.ok) throw new Error('Failed to load');
+        const data = await res.json();
         
-        while (hasMore && allItems.length < 100) {
-            const res = await fetch(`${apiBase}/popular/${state.currentPlatform}?page=${page}`);
-            if (!res.ok) throw new Error('Failed to load');
-            const data = await res.json();
-            
-            if (data.items && data.items.length > 0) {
-                allItems.push(...data.items);
-                hasMore = data.hasMore;
-                page++;
-            } else {
-                hasMore = false;
-            }
-            
-            // Limit to 3 API requests
-            if (page > 3) break;
-        }
-        
-        state.popularData = allItems;
-        state.popularTotalPages = Math.ceil(allItems.length / state.itemsPerPage);
-        state.popularPage = 1;
+        state.popularData = data.items || [];
+        state.popularHasMore = data.hasMore || false;
         
         renderPopularPage();
     } catch (e) {
@@ -321,17 +315,14 @@ async function loadPopularRooms() {
 
 function renderPopularPage() {
     const grid = document.getElementById('popular-grid');
-    const start = (state.popularPage - 1) * state.itemsPerPage;
-    const end = start + state.itemsPerPage;
-    const pageItems = state.popularData.slice(start, end);
     
     grid.innerHTML = '';
-    pageItems.forEach(room => grid.appendChild(createRoomCard(room)));
+    state.popularData.forEach(room => grid.appendChild(createRoomCard(room)));
     
     // Update pagination
-    document.getElementById('popular-page-info').textContent = `第 ${state.popularPage} / ${state.popularTotalPages} 页`;
+    document.getElementById('popular-page-info').textContent = `第 ${state.popularPage} 页`;
     document.getElementById('popular-prev').disabled = state.popularPage <= 1;
-    document.getElementById('popular-next').disabled = state.popularPage >= state.popularTotalPages;
+    document.getElementById('popular-next').disabled = !state.popularHasMore;
 }
 
 function retryLoadPopular() {
@@ -818,5 +809,94 @@ async function saveCookie(platform) {
         alert('保存成功！');
     } catch (e) {
         alert('保存失败: ' + e.message);
+    }
+}
+
+// Bilibili QR Login
+let qrPollInterval = null;
+
+async function startBiliBiliQRLogin() {
+    const modal = document.getElementById('qr-modal');
+    const loading = document.getElementById('qr-loading');
+    const qrImage = document.getElementById('qr-image');
+    const qrStatus = document.getElementById('qr-status');
+    
+    modal.classList.remove('hidden');
+    loading.style.display = 'flex';
+    qrImage.style.display = 'none';
+    qrStatus.textContent = '';
+    
+    try {
+        const res = await fetch(`${apiBase}/bilibili/qr/generate`);
+        const data = await res.json();
+        
+        if (!data.success) {
+            qrStatus.textContent = '获取二维码失败: ' + (data.message || '未知错误');
+            loading.style.display = 'none';
+            return;
+        }
+        
+        // Generate QR code using external library or API
+        qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.qrcodeUrl)}`;
+        qrImage.style.display = 'block';
+        loading.style.display = 'none';
+        qrStatus.textContent = '请使用哔哩哔哩 App 扫码登录';
+        
+        // Start polling
+        startQRPoll(data.qrcodeKey);
+    } catch (e) {
+        qrStatus.textContent = '获取二维码失败: ' + e.message;
+        loading.style.display = 'none';
+    }
+}
+
+function startQRPoll(qrcodeKey) {
+    if (qrPollInterval) clearInterval(qrPollInterval);
+    
+    qrPollInterval = setInterval(async () => {
+        try {
+            const res = await fetch(`${apiBase}/bilibili/qr/poll?qrcode_key=${qrcodeKey}`);
+            const data = await res.json();
+            const qrStatus = document.getElementById('qr-status');
+            
+            if (!data.success) {
+                qrStatus.textContent = data.message || '轮询失败';
+                return;
+            }
+            
+            switch (data.status) {
+                case 'success':
+                    qrStatus.textContent = '登录成功！';
+                    document.getElementById('bilibili-login-status').textContent = '已登录';
+                    closeQRModal();
+                    // Reload platform data
+                    if (state.currentPlatform === 'bilibili') {
+                        state.popularData = [];
+                        state.popularPage = 1;
+                        loadPopularRooms();
+                    }
+                    break;
+                case 'scanned':
+                    qrStatus.textContent = '已扫码，请在手机上确认登录';
+                    break;
+                case 'expired':
+                    qrStatus.textContent = '二维码已过期，请重新获取';
+                    clearInterval(qrPollInterval);
+                    break;
+                case 'waiting':
+                    // Still waiting
+                    break;
+            }
+        } catch (e) {
+            console.error('QR poll error:', e);
+        }
+    }, 3000);
+}
+
+function closeQRModal() {
+    document.getElementById('qr-modal').classList.add('hidden');
+    if (qrPollInterval) {
+        clearInterval(qrPollInterval);
+        qrPollInterval = null;
     }
 }

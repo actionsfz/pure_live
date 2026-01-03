@@ -22,6 +22,9 @@ void main(List<String> args) async {
   Get.put<AppSettings>(settings);
   Get.put(settings); // Verify if we can access ServerSettings specifically if needed
 
+  // Apply saved cookies to site instances
+  _initializeSiteCookies(settings);
+
   // Initialize Router
   final router = Router();
 
@@ -39,6 +42,10 @@ void main(List<String> args) async {
   router.get('/api/platforms', _getPlatforms);
   router.get('/api/image', _proxyImage);
   router.get('/api/reset-cache/<platform>', _resetPlatformCache);
+  
+  // Bilibili QR Login
+  router.get('/api/bilibili/qr/generate', _generateBiliBiliQR);
+  router.get('/api/bilibili/qr/poll', _pollBiliBiliQR);
   
   // WebSocket for danmaku
   router.get('/ws/danmaku/<platform>/<roomId>', _handleDanmakuWebSocket);
@@ -123,7 +130,17 @@ Future<Response> _updateCookie(Request request) async {
     final cookie = data['cookie'];
     final settings = Get.find<ServerSettings>();
     settings.updateCookie(platform, cookie);
-    return Response.ok('Updated');
+    
+    // Sync cookie to site instance
+    if (platform == 'bilibili') {
+      final biliSite = Sites.of('bilibili').liveSite as BiliBiliSite;
+      biliSite.cookie = cookie;
+      // Reset WBI keys to force refresh
+      BiliBiliSite.kImgKey = '';
+      BiliBiliSite.kSubKey = '';
+    }
+    
+    return Response.ok(jsonEncode({'success': true}), headers: {'content-type': 'application/json'});
   } catch (e) {
     return Response.badRequest(body: 'Invalid data');
   }
@@ -372,4 +389,114 @@ Future<Response> _handleDanmakuWebSocket(Request request, String platform, Strin
       await webSocket.sink.close();
     }
   })(request);
+}
+
+/// Initialize site cookies from saved settings
+void _initializeSiteCookies(ServerSettings settings) {
+  // Apply bilibili cookie
+  final biliCookie = settings.bilibiliCookie.value;
+  if (biliCookie.isNotEmpty) {
+    final biliSite = Sites.of('bilibili').liveSite as BiliBiliSite;
+    biliSite.cookie = biliCookie;
+    print('Bilibili cookie loaded');
+  }
+}
+
+/// Generate Bilibili QR code for login
+Future<Response> _generateBiliBiliQR(Request request) async {
+  try {
+    final httpClient = HttpClient();
+    final uri = Uri.parse('https://passport.bilibili.com/x/passport-login/web/qrcode/generate');
+    final httpRequest = await httpClient.getUrl(uri);
+    httpRequest.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    
+    final httpResponse = await httpRequest.close();
+    final responseBody = await httpResponse.transform(utf8.decoder).join();
+    final data = jsonDecode(responseBody);
+    
+    if (data['code'] != 0) {
+      return Response.ok(jsonEncode({
+        'success': false,
+        'message': data['message'] ?? 'Failed to generate QR code',
+      }), headers: {'content-type': 'application/json'});
+    }
+    
+    return Response.ok(jsonEncode({
+      'success': true,
+      'qrcodeKey': data['data']['qrcode_key'],
+      'qrcodeUrl': data['data']['url'],
+    }), headers: {'content-type': 'application/json'});
+  } catch (e) {
+    return Response.internalServerError(body: 'Error generating QR code: $e');
+  }
+}
+
+/// Poll Bilibili QR code login status
+Future<Response> _pollBiliBiliQR(Request request) async {
+  try {
+    final qrcodeKey = request.url.queryParameters['qrcode_key'];
+    if (qrcodeKey == null || qrcodeKey.isEmpty) {
+      return Response.badRequest(body: 'Missing qrcode_key parameter');
+    }
+    
+    final httpClient = HttpClient();
+    final uri = Uri.parse('https://passport.bilibili.com/x/passport-login/web/qrcode/poll?qrcode_key=$qrcodeKey');
+    final httpRequest = await httpClient.getUrl(uri);
+    httpRequest.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    
+    final httpResponse = await httpRequest.close();
+    final responseBody = await httpResponse.transform(utf8.decoder).join();
+    final data = jsonDecode(responseBody);
+    
+    if (data['code'] != 0) {
+      return Response.ok(jsonEncode({
+        'success': false,
+        'message': data['message'] ?? 'Poll failed',
+      }), headers: {'content-type': 'application/json'});
+    }
+    
+    final code = data['data']['code'];
+    String status;
+    String? cookie;
+    
+    switch (code) {
+      case 0:
+        // Login successful - extract cookies from response
+        status = 'success';
+        final cookies = <String>[];
+        httpResponse.cookies.forEach((c) {
+          cookies.add('${c.name}=${c.value}');
+        });
+        if (cookies.isNotEmpty) {
+          cookie = cookies.join('; ');
+          // Save and apply cookie
+          final settings = Get.find<ServerSettings>();
+          settings.updateCookie('bilibili', cookie);
+          final biliSite = Sites.of('bilibili').liveSite as BiliBiliSite;
+          biliSite.cookie = cookie;
+          BiliBiliSite.kImgKey = '';
+          BiliBiliSite.kSubKey = '';
+        }
+        break;
+      case 86038:
+        status = 'expired';
+        break;
+      case 86090:
+        status = 'scanned';
+        break;
+      case 86101:
+        status = 'waiting';
+        break;
+      default:
+        status = 'unknown';
+    }
+    
+    return Response.ok(jsonEncode({
+      'success': true,
+      'status': status,
+      'cookie': cookie,
+    }), headers: {'content-type': 'application/json'});
+  } catch (e) {
+    return Response.internalServerError(body: 'Error polling QR status: $e');
+  }
 }

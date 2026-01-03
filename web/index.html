@@ -139,9 +139,13 @@
             <div id="settings-section" class="section hidden">
                 <h2>设置</h2>
                 <div class="setting-item">
-                    <label>哔哩哔哩 Cookie</label>
-                    <input type="text" id="bilibili-cookie" placeholder="用于获取高画质">
-                    <button onclick="saveCookie('bilibili')">保存</button>
+                    <label>哔哩哔哩登录</label>
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
+                        <span id="bilibili-login-status">未登录</span>
+                        <button onclick="startBiliBiliQRLogin()">扫码登录</button>
+                    </div>
+                    <input type="text" id="bilibili-cookie" placeholder="或手动输入Cookie">
+                    <button onclick="saveCookie('bilibili')">保存Cookie</button>
                 </div>
                 <div class="setting-item">
                     <label>抖音 Cookie</label>
@@ -152,6 +156,22 @@
                     <label>虎牙 Cookie</label>
                     <input type="text" id="huya-cookie" placeholder="用于虎牙直播">
                     <button onclick="saveCookie('huya')">保存</button>
+                </div>
+            </div>
+            
+            <!-- QR Login Modal -->
+            <div id="qr-modal" class="modal hidden">
+                <div class="modal-content">
+                    <h3>扫码登录哔哩哔哩</h3>
+                    <div id="qr-container">
+                        <div id="qr-loading" class="loading-indicator">
+                            <div class="spinner"></div>
+                            <span>加载中...</span>
+                        </div>
+                        <img id="qr-image" style="display:none; width: 200px; height: 200px;" alt="QR Code">
+                        <p id="qr-status"></p>
+                    </div>
+                    <button onclick="closeQRModal()">关闭</button>
                 </div>
             </div>
         </main>

@@ -208,6 +208,7 @@ nav button.active {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-height: 0; /* Allow flex shrink */
 }
 
 .danmaku-item {
@@ -793,4 +794,45 @@ button#play-btn:hover {
     .grid {
         grid-template-columns: repeat(2, 1fr);
     }
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.modal-content {
+    background: var(--surface-color);
+    padding: 30px;
+    border-radius: var(--border-radius);
+    text-align: center;
+    max-width: 400px;
+}
+
+.modal-content h3 {
+    margin-bottom: 20px;
+}
+
+.modal-content button {
+    margin-top: 20px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 10px 30px;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+}
+
+#qr-status {
+    margin-top: 15px;
+    color: var(--secondary-text);
 }
