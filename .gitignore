@@ -56,4 +56,5 @@ Podfile.lock
 # FVM Version Cache
 .fvm/
 
+# web data
 web_data/

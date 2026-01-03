@@ -165,6 +165,38 @@ function initVolumeControls() {
             adjustVolume(e.deltaY < 0 ? 0.05 : -0.05);
         }, { passive: false });
     }
+    
+    // Click capture layer for double-click web fullscreen
+    const clickCapture = document.getElementById('click-capture');
+    if (clickCapture) {
+        let clickTimer = null;
+        let clickCount = 0;
+        
+        clickCapture.addEventListener('click', (e) => {
+            clickCount++;
+            
+            if (clickCount === 1) {
+                // Wait to see if it's a double-click
+                clickTimer = setTimeout(() => {
+                    // Single click - toggle play/pause
+                    const video = document.getElementById('videoElement');
+                    if (video) {
+                        if (video.paused) {
+                            video.play();
+                        } else {
+                            video.pause();
+                        }
+                    }
+                    clickCount = 0;
+                }, 250);
+            } else if (clickCount === 2) {
+                // Double click - toggle web fullscreen
+                clearTimeout(clickTimer);
+                clickCount = 0;
+                toggleWebFullscreen();
+            }
+        });
+    }
 }
 
 // Web Fullscreen

@@ -71,6 +71,7 @@ body {
 
 .app-container.webfullscreen .danmaku-panel {
     height: 100vh;
+    max-height: 100vh;
     border-radius: 0;
 }
 
@@ -179,6 +180,18 @@ nav button.active {
     width: 100%;
     aspect-ratio: 16/9;
     background: #000;
+    display: block;
+}
+
+/* Click capture layer for double-click web fullscreen */
+.click-capture {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 50px; /* Leave space for video controls */
+    z-index: 5;
+    cursor: pointer;
 }
 
 /* Danmaku Panel */
@@ -190,6 +203,16 @@ nav button.active {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    /* Match video aspect ratio height */
+    max-height: calc((100vw - 400px - 320px - 16px) * 9 / 16);
+    height: calc((100vw - 400px - 320px - 16px) * 9 / 16);
+}
+
+@media (min-width: 1400px) {
+    .danmaku-panel {
+        max-height: calc((1400px - 40px - 320px - 16px) * 9 / 16);
+        height: calc((1400px - 40px - 320px - 16px) * 9 / 16);
+    }
 }
 
 .danmaku-header {
@@ -199,6 +222,7 @@ nav button.active {
     padding: 12px 16px;
     background: var(--surface-hover);
     font-weight: 600;
+    flex-shrink: 0;
 }
 
 .danmaku-list {
@@ -208,7 +232,7 @@ nav button.active {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    min-height: 0; /* Allow flex shrink */
+    min-height: 0;
 }
 
 .danmaku-item {

@@ -10,6 +10,7 @@ import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:pure_live/core/interface/app_settings.dart';
+import 'package:pure_live/core/interface/live_danmaku.dart';
 import 'package:pure_live/core/sites.dart';
 import 'package:pure_live/core/site/bilibili_site.dart';
 import 'package:pure_live/server/server_settings.dart';
@@ -326,9 +327,10 @@ Future<Response> _resetPlatformCache(Request request, String platform) async {
 /// WebSocket handler for danmaku
 Future<Response> _handleDanmakuWebSocket(Request request, String platform, String roomId) async {
   return webSocketHandler((WebSocketChannel webSocket) async {
+    LiveDanmaku? danmaku;
     try {
       final site = Sites.of(platform);
-      final danmaku = site.liveSite.getDanmaku();
+      danmaku = site.liveSite.getDanmaku();
       
       // Get room detail for danmaku args
       final room = await site.liveSite.getRoomDetail(roomId: roomId, platform: platform);
@@ -370,35 +372,53 @@ Future<Response> _handleDanmakuWebSocket(Request request, String platform, Strin
       };
       
       // Start receiving danmaku
-      await danmaku.start(room.danmakuData);
+      danmaku.start(room.danmakuData);
       
-      // Handle client disconnect
-      webSocket.stream.listen(
-        (message) {
-          // Handle any client messages if needed
-        },
-        onDone: () {
-          danmaku.stop();
-        },
-        onError: (e) {
-          danmaku.stop();
-        },
-      );
+      // Handle client disconnect - this keeps the WebSocket alive
+      await for (final message in webSocket.stream) {
+        // Handle any client messages if needed
+      }
     } catch (e) {
-      webSocket.sink.add(jsonEncode({'type': 'error', 'message': '弹幕连接失败: $e'}));
-      await webSocket.sink.close();
+      try {
+        webSocket.sink.add(jsonEncode({'type': 'error', 'message': '弹幕连接失败: $e'}));
+      } catch (_) {}
+    } finally {
+      danmaku?.stop();
     }
   })(request);
 }
 
 /// Initialize site cookies from saved settings
-void _initializeSiteCookies(ServerSettings settings) {
-  // Apply bilibili cookie
+void _initializeSiteCookies(ServerSettings settings) async {
+  // Apply bilibili cookie and fetch user info
   final biliCookie = settings.bilibiliCookie.value;
   if (biliCookie.isNotEmpty) {
     final biliSite = Sites.of('bilibili').liveSite as BiliBiliSite;
     biliSite.cookie = biliCookie;
     print('Bilibili cookie loaded');
+    
+    // Fetch user ID from Bilibili API
+    try {
+      final httpClient = HttpClient();
+      final uri = Uri.parse('https://api.bilibili.com/x/member/web/account');
+      final request = await httpClient.getUrl(uri);
+      request.headers.set('Cookie', biliCookie);
+      request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+      
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      final data = jsonDecode(body);
+      
+      if (data['code'] == 0 && data['data'] != null) {
+        final uid = data['data']['mid'] as int? ?? 0;
+        biliSite.userId = uid;
+        print('Bilibili user ID loaded: $uid');
+      } else {
+        print('Failed to load Bilibili user info: ${data['message']}');
+      }
+    } catch (e) {
+      print('Error loading Bilibili user info: $e');
+    }
   }
 }
 
