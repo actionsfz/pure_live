@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:get/get.dart';
 import 'dart:developer' as developer;
-import 'package:pure_live/common/index.dart';
+import 'package:pure_live/common/models/index.dart';
 import 'package:pure_live/model/live_category.dart';
 import 'package:pure_live/core/common/core_log.dart';
 import 'package:pure_live/core/common/http_client.dart';
@@ -14,6 +14,7 @@ import 'package:pure_live/core/common/convert_helper.dart';
 import 'package:pure_live/model/live_category_result.dart';
 import 'package:pure_live/core/danmaku/douyin_danmaku.dart';
 import 'package:pure_live/core/interface/live_danmaku.dart';
+import 'package:pure_live/core/interface/app_settings.dart';
 
 class DouyinSite implements LiveSite {
   @override
@@ -24,7 +25,8 @@ class DouyinSite implements LiveSite {
 
   @override
   LiveDanmaku getDanmaku() => DouyinDanmaku();
-  final SettingsService settings = Get.find<SettingsService>();
+
+  final AppSettings settings = Get.find<AppSettings>();
 
   /// 使用 QQBrowser User-Agent（参考 DouyinLiveRecorder）
   static const String kDefaultUserAgent =
@@ -94,7 +96,7 @@ class DouyinSite implements LiveSite {
           areaType: id,
           areaName: subItem["partition"]["title"] ?? '',
           areaPic: "",
-          platform: Sites.douyinSite,
+          platform: id,
         );
         subs.add(subCategory);
       }
@@ -108,7 +110,7 @@ class DouyinSite implements LiveSite {
           areaType: category.id,
           areaPic: "",
           areaName: category.name,
-          platform: Sites.douyinSite,
+          platform: id,
         ),
       );
       categories.add(category);
@@ -163,7 +165,7 @@ class DouyinSite implements LiveSite {
         liveStatus: LiveStatus.live,
         avatar: item["room"]["owner"]["avatar_thumb"]["url_list"][0].toString(),
         status: true,
-        platform: Sites.douyinSite,
+        platform: id,
         area: item['tag_name'].toString(),
         watching: item["room"]?["room_view_stats"]?["display_value"].toString() ?? '',
       );
@@ -212,7 +214,7 @@ class DouyinSite implements LiveSite {
         title: item["room"]["title"].toString(),
         cover: item["room"]["cover"]["url_list"][0].toString(),
         nick: item["room"]["owner"]["nickname"].toString(),
-        platform: Sites.douyinSite,
+        platform: id,
         area: item["tag_name"] ?? '热门推荐',
         avatar: item["room"]["owner"]["avatar_thumb"]["url_list"][0].toString(),
         watching: item["room"]?["room_view_stats"]?["display_value"].toString() ?? '',
@@ -268,7 +270,7 @@ class DouyinSite implements LiveSite {
       watching: roomStatus ? room["room_view_stats"]["display_value"].toString() : "",
       status: roomStatus,
       link: "https://live.douyin.com/$webRid",
-      platform: Sites.douyinSite,
+      platform: id,
       area: '',
       liveStatus: roomStatus ? LiveStatus.live : LiveStatus.offline,
       introduction: owner["signature"].toString(),
@@ -325,7 +327,7 @@ class DouyinSite implements LiveSite {
       status: roomStatus,
       liveStatus: roomStatus ? LiveStatus.live : LiveStatus.offline,
       link: "https://live.douyin.com/$webRid",
-      platform: Sites.douyinSite,
+      platform: id,
       area: '',
       introduction: owner?["signature"]?.toString() ?? "",
       notice: "",
@@ -364,7 +366,7 @@ class DouyinSite implements LiveSite {
       link: "https://live.douyin.com/$webRid",
       area: '',
       status: roomStatus,
-      platform: Sites.douyinSite,
+      platform: id,
       introduction: roomInfo["title"].toString(),
       notice: "",
       danmakuData: DouyinDanmakuArgs(
@@ -628,7 +630,7 @@ class DouyinSite implements LiveSite {
         title: itemData["title"].toString(),
         cover: itemData["cover"]["url_list"][0].toString(),
         nick: itemData["owner"]["nickname"].toString(),
-        platform: Sites.douyinSite,
+        platform: id,
         avatar: itemData["owner"]["avatar_thumb"]["url_list"][0].toString(),
         liveStatus: roomStatus ? LiveStatus.live : LiveStatus.offline,
         area: '',

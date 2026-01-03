@@ -15,7 +15,7 @@ import 'package:pure_live/core/danmaku/empty_danmaku.dart';
 import 'package:pure_live/common/models/live_message.dart';
 import 'package:pure_live/model/live_category_result.dart';
 import 'package:pure_live/core/interface/live_danmaku.dart';
-import 'package:pure_live/common/services/settings_service.dart';
+import 'package:pure_live/core/interface/app_settings.dart';
 
 class CCSite implements LiveSite {
   @override
@@ -29,7 +29,7 @@ class CCSite implements LiveSite {
   final String kUserAgent =
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 
-  final SettingsService settings = Get.find<SettingsService>();
+  final AppSettings settings = Get.find<AppSettings>();
   @override
   Future<List<LiveCategory>> getCategores(int page, int pageSize) async {
     List<LiveCategory> categories = [

@@ -7,7 +7,7 @@ import 'package:pure_live/core/site/cc_site.dart';
 import 'package:pure_live/core/site/iptv_site.dart';
 import 'package:pure_live/core/site/bilibili_site.dart';
 import 'package:pure_live/core/site/kuaishou_site.dart';
-import 'package:pure_live/common/services/settings_service.dart';
+import 'package:pure_live/core/interface/app_settings.dart';
 
 class Sites {
   static const String allSite = "all";
@@ -33,13 +33,13 @@ class Sites {
   }
 
   List<Site> availableSites({bool containsAll = false}) {
-    final SettingsService settingsService = Get.find<SettingsService>();
+    final AppSettings settings = Get.find<AppSettings>();
     if (containsAll) {
-      var result = supportSites.where((element) => settingsService.hotAreasList.value.contains(element.id)).toList();
+      var result = supportSites.where((element) => settings.hotAreasList.contains(element.id)).toList();
       result.insert(0, Site(id: "all", name: "全部", logo: "assets/images/all.png", liveSite: LiveSite()));
       return result;
     }
-    return supportSites.where((element) => settingsService.hotAreasList.value.contains(element.id)).toList();
+    return supportSites.where((element) => settings.hotAreasList.contains(element.id)).toList();
   }
 }
 

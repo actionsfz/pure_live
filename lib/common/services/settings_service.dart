@@ -13,7 +13,9 @@ import 'package:pure_live/common/utils/hive_pref_util.dart';
 import 'package:pure_live/modules/web_dav/webdav_config.dart';
 import 'package:pure_live/common/services/bilibili_account_service.dart';
 
-class SettingsService extends GetxController {
+import 'package:pure_live/core/interface/app_settings.dart';
+
+class SettingsService extends GetxController implements AppSettings {
   // ==============================
   // 🔹 Getter (computed properties)
   // ==============================

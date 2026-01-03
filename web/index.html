@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pure Live Server</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Player Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flv.js/dist/flv.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="navbar">
+            <div class="logo">Pure Live</div>
+            <nav>
+                <button id="nav-home" class="active">Home</button>
+                <button id="nav-favorites">Favorites</button>
+                <button id="nav-settings">Settings</button>
+            </nav>
+        </header>
+
+        <main id="main-content">
+            <!-- Dynamic Content -->
+            <div id="player-container" class="hidden">
+                <video id="videoElement" controls autoplay></video>
+                <button id="close-player" class="icon-btn">×</button>
+            </div>
+            
+            <div id="input-section" class="section">
+                <h1>Watch Live Stream</h1>
+                <div class="input-group">
+                    <select id="platform-select">
+                        <option value="bilibili">Bilibili</option>
+                        <option value="douyu">Douyu</option>
+                        <option value="huya">Huya</option>
+                        <option value="douyin">Douyin</option>
+                        <option value="kuaishou">Kuaishou</option>
+                    </select>
+                    <input type="text" id="room-id-input" placeholder="Enter Room ID">
+                    <button id="play-btn">Play</button>
+                </div>
+            </div>
+
+            <div id="favorites-section" class="section hidden">
+                <h2>Favorites</h2>
+                <div id="favorites-grid" class="grid">
+                    <!-- Favorites items will be injected here -->
+                </div>
+            </div>
+
+            <div id="settings-section" class="section hidden">
+                <h2>Settings</h2>
+                <div class="setting-item">
+                    <label>Bilibili Cookie</label>
+                    <input type="text" id="bilibili-cookie">
+                    <button onclick="saveCookie('bilibili')">Save</button>
+                </div>
+                <!-- More settings -->
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

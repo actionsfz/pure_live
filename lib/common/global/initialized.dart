@@ -128,7 +128,8 @@ class AppInitializer {
   }
 
   void initService() {
-    Get.put(SettingsService());
+    var settings = Get.put(SettingsService());
+    Get.put<AppSettings>(settings);
     Get.put(AuthController());
     Get.put(FavoriteController());
     Get.put(BiliBiliAccountService());

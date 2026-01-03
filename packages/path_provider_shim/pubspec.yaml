@@ -1,0 +1,5 @@
+name: path_provider
+description: Shim for path_provider
+version: 1.0.0
+environment:
+  sdk: '>=2.12.0 <4.0.0'

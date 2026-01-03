@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:crypto/crypto.dart';
-import 'package:pure_live/common/index.dart';
+import 'package:pure_live/common/models/index.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:pure_live/model/live_category.dart';
@@ -22,6 +22,7 @@ import 'package:pure_live/model/live_category_result.dart';
 import 'package:pure_live/core/interface/live_danmaku.dart';
 import 'package:pure_live/core/tars/get_cdn_token_ex_req.dart';
 import 'package:pure_live/core/tars/get_cdn_token_ex_resp.dart';
+import 'package:pure_live/core/interface/app_settings.dart';
 
 class HuyaSite implements LiveSite {
   @override
@@ -57,7 +58,7 @@ class HuyaSite implements LiveSite {
   final String kUserAgent =
       "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36";
 
-  final SettingsService settings = Get.find<SettingsService>();
+  final AppSettings settings = Get.find<AppSettings>();
   Future<List<LiveArea>> getSubCategores(LiveCategory liveCategory) async {
     var result = await HttpClient.instance.getJson(
       "https://live.cdn.huya.com/liveconfig/game/bussLive",
@@ -71,7 +72,7 @@ class HuyaSite implements LiveSite {
         areaId: gid!,
         areaName: item["gameFullName"].toString(),
         areaType: liveCategory.id,
-        platform: Sites.huyaSite,
+        platform: id,
         areaPic: "https://huyaimg.msstatic.com/cdnimage/game/$gid-MS.jpg",
         typeName: liveCategory.name,
       );
@@ -115,7 +116,7 @@ class HuyaSite implements LiveSite {
         area: item["gameFullName"].toString(),
         liveStatus: LiveStatus.live,
         status: true,
-        platform: Sites.huyaSite,
+        platform: id,
       );
       items.add(roomItem);
     }
@@ -163,7 +164,7 @@ class HuyaSite implements LiveSite {
   Future<String> getHuYaUA() async {
     // 1. 缓存拦截
     if (playUserAgent != null) {
-      debugPrint("UA 获取成功，使用缓存");
+      CoreLog.i("UA 获取成功，使用缓存");
       return playUserAgent!;
     }
 
@@ -186,7 +187,7 @@ class HuyaSite implements LiveSite {
               if (ua != null && !isAlreadySet) {
                 isAlreadySet = true;
                 playUserAgent = ua;
-                debugPrint("✅ 获胜线路: $url");
+                CoreLog.i("✅ 获胜线路: $url");
                 if (!completer.isCompleted) completer.complete(ua);
                 Future.microtask(() => cancelToken.cancel("done"));
               }
@@ -197,7 +198,7 @@ class HuyaSite implements LiveSite {
       final result = await completer.future.timeout(const Duration(seconds: 5));
       return result;
     } catch (e) {
-      debugPrint("⚠️ UA 获取失败，使用兜底值: $e");
+      CoreLog.i("⚠️ UA 获取失败，使用兜底值: $e");
       playUserAgent = HYSDK_UA;
       return HYSDK_UA;
     } finally {
@@ -246,7 +247,7 @@ class HuyaSite implements LiveSite {
         nick: item["nick"].toString(),
         avatar: item["avatar180"],
         watching: item["totalCount"].toString(),
-        platform: Sites.huyaSite,
+        platform: id,
         liveStatus: LiveStatus.live,
         status: true,
       );
@@ -366,7 +367,7 @@ class HuyaSite implements LiveSite {
         notice: data['welcomeText'] ?? '',
         status: data['liveStatus'] == "ON" || data['liveStatus'] == "REPLAY",
         liveStatus: data['liveStatus'] == "ON" || data['liveStatus'] == "REPLAY" ? LiveStatus.live : LiveStatus.offline,
-        platform: Sites.huyaSite,
+        platform: id,
         data: HuyaUrlDataModel(url: "", lines: huyaLines, bitRates: huyaBiterates, uid: "", isXingxiu: isXingxiu),
         danmakuData: HuyaDanmakuArgs(ayyuid: data["profileInfo"]["yyid"] ?? 0, topSid: topSid, subSid: subSid),
         link: "https://www.huya.com/$roomId",
@@ -418,7 +419,7 @@ class HuyaSite implements LiveSite {
         liveStatus: LiveStatus.live,
         avatar: item["game_imgUrl"].toString(),
         watching: item["game_total_count"].toString(),
-        platform: Sites.huyaSite,
+        platform: id,
       );
       items.add(roomItem);
     }
@@ -518,7 +519,7 @@ class HuyaSite implements LiveSite {
       }
     } catch (e) {
       // 在这里可以选择打印错误信息或采取其他措施
-      debugPrint('An error occurred: $e');
+      CoreLog.i('An error occurred: $e');
     }
     // 如果没有找到有效的UID，则生成一个随机数
     final random = Random();

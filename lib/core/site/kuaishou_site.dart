@@ -18,7 +18,7 @@ import 'package:pure_live/core/danmaku/empty_danmaku.dart';
 import 'package:pure_live/model/live_category_result.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:pure_live/core/interface/live_danmaku.dart';
-import 'package:pure_live/common/services/settings_service.dart';
+import 'package:pure_live/core/interface/app_settings.dart';
 
 class KuaishowSite implements LiveSite {
   @override
@@ -84,7 +84,7 @@ class KuaishowSite implements LiveSite {
     'Sec-Fetch-User': '?1',
   };
 
-  final SettingsService settings = Get.find<SettingsService>();
+  final AppSettings settings = Get.find<AppSettings>();
 
   Future<List<LiveArea>> getAllSubCategores(
     LiveCategory liveCategory,

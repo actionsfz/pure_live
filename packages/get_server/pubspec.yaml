@@ -1,0 +1,6 @@
+name: get
+description: A minimal shim of GetX for pure Dart server environments.
+version: 5.0.0
+
+environment:
+  sdk: '>=2.12.0 <4.0.0'

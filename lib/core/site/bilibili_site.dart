@@ -16,7 +16,7 @@ import 'package:pure_live/core/common/convert_helper.dart';
 import 'package:pure_live/model/live_category_result.dart';
 import 'package:pure_live/core/interface/live_danmaku.dart';
 import 'package:pure_live/core/danmaku/bilibili_danmaku.dart';
-import 'package:pure_live/common/services/settings_service.dart';
+import 'package:pure_live/core/interface/app_settings.dart';
 
 class BiliBiliSite implements LiveSite {
   @override
@@ -28,7 +28,7 @@ class BiliBiliSite implements LiveSite {
   int userId = 0;
   @override
   LiveDanmaku getDanmaku() => BiliBiliDanmaku();
-  final SettingsService settings = Get.find<SettingsService>();
+  final AppSettings settings = Get.find<AppSettings>();
 
   static const String kDefaultUserAgent =
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36";

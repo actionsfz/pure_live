@@ -1,0 +1,66 @@
+name: pure_live
+description: Pure Live Server
+version: 2.0.11+22
+publish_to: none
+
+environment:
+  sdk: ^3.10.4
+
+executables:
+  server: server
+
+dependencies:
+  # core dependencies
+  hashlib: ^2.0.0
+  html: ^0.15.4
+  http: ^1.1.0
+  web_socket_channel: ^3.0.1
+  
+  # dependencies from main pubspec
+  protobuf: ^4.1.0
+  fixnum: ^1.1.0
+  dio: ^5.9.0
+  dio_cookie_manager: ^3.3.0
+  cookie_jar: ^4.0.8
+  
+  # utils
+  get: ^5.0.0-release-candidate-9.3.2
+  intl: ^0.20.2
+  timezone: ^0.10.1
+  date_format: ^2.0.9
+  path: ^1.9.1
+  logger: ^2.6.2
+  crypto: ^3.0.7
+  brotli: ^0.6.0
+  
+  # custom packages
+  dart_tars_protocol:
+    git: https://github.com/xiaoyaocz/dart_tars_protocol.git
+  tars_dart:
+    git:
+      url: https://github.com/xiaoyaocz/dart_simple_live.git
+      path: ./simple_live_core/packages/tars_dart
+      
+  html_unescape: ^2.0.0
+  mime: ^2.0.0
+  
+  dart_quickjs:
+    git: https://github.com/xiaoyaocz/dart_quickjs.git
+    
+  rxdart: ^0.28.0
+  
+  # server specific
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
+  shelf_static: ^1.1.2
+
+dependency_overrides:
+  get:
+    path: packages/get_server
+  media_kit:
+    path: packages/media_kit_shim
+  flutter:
+    path: packages/flutter_shim
+  path_provider:
+    path: packages/path_provider_shim
+
