@@ -16,18 +16,33 @@
             <div class="logo">Pure Live</div>
             <nav>
                 <button id="nav-home" class="active">Home</button>
+                <button id="nav-popular">Popular</button>
+                <button id="nav-categories">Categories</button>
                 <button id="nav-favorites">Favorites</button>
                 <button id="nav-settings">Settings</button>
             </nav>
         </header>
 
         <main id="main-content">
-            <!-- Dynamic Content -->
+            <!-- Player Container (shows above content when playing) -->
             <div id="player-container" class="hidden">
+                <div class="player-header">
+                    <div class="player-info">
+                        <span id="player-title"></span>
+                        <span id="player-streamer"></span>
+                    </div>
+                    <div class="player-controls">
+                        <select id="quality-select"></select>
+                        <button id="favorite-btn" class="icon-btn">
+                            <span class="heart-icon">♡</span>
+                        </button>
+                        <button id="close-player" class="icon-btn">×</button>
+                    </div>
+                </div>
                 <video id="videoElement" controls autoplay></video>
-                <button id="close-player" class="icon-btn">×</button>
             </div>
             
+            <!-- Home Section -->
             <div id="input-section" class="section">
                 <h1>Watch Live Stream</h1>
                 <div class="input-group">
@@ -37,27 +52,67 @@
                         <option value="huya">Huya</option>
                         <option value="douyin">Douyin</option>
                         <option value="kuaishou">Kuaishou</option>
+                        <option value="cc">CC</option>
                     </select>
                     <input type="text" id="room-id-input" placeholder="Enter Room ID">
                     <button id="play-btn">Play</button>
                 </div>
             </div>
 
+            <!-- Popular Rooms Section -->
+            <div id="popular-section" class="section hidden">
+                <h2>Popular Rooms</h2>
+                <div id="platform-tabs" class="platform-tabs"></div>
+                <div id="popular-grid" class="grid"></div>
+                <div id="popular-loading" class="loading-indicator hidden">
+                    <div class="spinner"></div>
+                    <span>Loading...</span>
+                </div>
+            </div>
+
+            <!-- Categories Section -->
+            <div id="categories-section" class="section hidden">
+                <h2>Categories</h2>
+                <div id="category-platform-tabs" class="platform-tabs"></div>
+                <div id="category-list" class="category-list"></div>
+                <div id="category-rooms-container" class="hidden">
+                    <button id="back-to-categories" class="back-btn">← Back to Categories</button>
+                    <h3 id="category-title"></h3>
+                    <div id="category-rooms-grid" class="grid"></div>
+                    <div id="category-loading" class="loading-indicator hidden">
+                        <div class="spinner"></div>
+                        <span>Loading...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Favorites Section -->
             <div id="favorites-section" class="section hidden">
                 <h2>Favorites</h2>
                 <div id="favorites-grid" class="grid">
                     <!-- Favorites items will be injected here -->
                 </div>
+                <p id="favorites-empty" class="empty-message hidden">No favorites yet. Add rooms to your favorites to see them here.</p>
             </div>
 
+            <!-- Settings Section -->
             <div id="settings-section" class="section hidden">
                 <h2>Settings</h2>
                 <div class="setting-item">
                     <label>Bilibili Cookie</label>
-                    <input type="text" id="bilibili-cookie">
+                    <input type="text" id="bilibili-cookie" placeholder="Enter cookie for higher quality streams">
                     <button onclick="saveCookie('bilibili')">Save</button>
                 </div>
-                <!-- More settings -->
+                <div class="setting-item">
+                    <label>Douyin Cookie</label>
+                    <input type="text" id="douyin-cookie" placeholder="Enter cookie for Douyin">
+                    <button onclick="saveCookie('douyin')">Save</button>
+                </div>
+                <div class="setting-item">
+                    <label>Huya Cookie</label>
+                    <input type="text" id="huya-cookie" placeholder="Enter cookie for Huya">
+                    <button onclick="saveCookie('huya')">Save</button>
+                </div>
             </div>
         </main>
     </div>

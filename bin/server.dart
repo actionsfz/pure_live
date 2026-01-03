@@ -24,10 +24,16 @@ void main(List<String> args) async {
 
   // API Routes
   router.get('/api/live/<platform>/<roomId>', _getLiveStream);
+  router.get('/api/stream/<platform>/<roomId>', _getStreamUrls);
+  router.get('/api/popular/<platform>', _getPopularRooms);
+  router.get('/api/categories/<platform>', _getCategories);
+  router.get('/api/category/<platform>/<areaType>/<areaId>', _getCategoryRooms);
   router.get('/api/favorites', _getFavorites);
+  router.get('/api/favorites/check/<platform>/<roomId>', _checkFavorite);
   router.post('/api/favorites', _addFavorite);
   router.delete('/api/favorites/<platform>/<roomId>', _removeFavorite);
   router.post('/api/settings/cookie', _updateCookie);
+  router.get('/api/platforms', _getPlatforms);
 
   // Serve Web Frontend
   // Assuming 'web' directory is in the root of the execution context
@@ -113,4 +119,130 @@ Future<Response> _updateCookie(Request request) async {
   } catch (e) {
     return Response.badRequest(body: 'Invalid data');
   }
+}
+
+/// Get stream URLs with quality options
+Future<Response> _getStreamUrls(Request request, String platform, String roomId) async {
+  try {
+    final site = Sites.of(platform);
+    final room = await site.liveSite.getRoomDetail(roomId: roomId, platform: platform);
+    
+    if (room.liveStatus != LiveStatus.live && room.liveStatus != LiveStatus.replay && !(room.isRecord ?? false)) {
+      return Response.ok(jsonEncode({
+        'success': false,
+        'message': 'Stream is offline',
+        'room': room.toJson(),
+      }), headers: {'content-type': 'application/json'});
+    }
+    
+    // Get available qualities
+    final qualities = await site.liveSite.getPlayQualites(detail: room);
+    
+    if (qualities.isEmpty) {
+      return Response.ok(jsonEncode({
+        'success': false,
+        'message': 'No stream qualities available',
+        'room': room.toJson(),
+      }), headers: {'content-type': 'application/json'});
+    }
+    
+    // Get quality index from query param or default to first (highest)
+    final qualityIndex = int.tryParse(request.url.queryParameters['quality'] ?? '0') ?? 0;
+    final selectedQuality = qualityIndex < qualities.length ? qualities[qualityIndex] : qualities[0];
+    
+    // Get play URLs for selected quality
+    final urls = await site.liveSite.getPlayUrls(detail: room, quality: selectedQuality);
+    
+    return Response.ok(jsonEncode({
+      'success': true,
+      'room': room.toJson(),
+      'qualities': qualities.map((q) => {'name': q.quality, 'sort': q.sort}).toList(),
+      'selectedQuality': qualityIndex,
+      'urls': urls,
+    }), headers: {'content-type': 'application/json'});
+  } catch (e) {
+    return Response.internalServerError(body: 'Error fetching stream: $e');
+  }
+}
+
+/// Get popular/recommended rooms for a platform with pagination
+Future<Response> _getPopularRooms(Request request, String platform) async {
+  try {
+    final page = int.tryParse(request.url.queryParameters['page'] ?? '1') ?? 1;
+    final site = Sites.of(platform);
+    final result = await site.liveSite.getRecommendRooms(page: page, nick: '热门');
+    
+    return Response.ok(jsonEncode({
+      'items': result.items.map((r) => r.toJson()).toList(),
+      'hasMore': result.hasMore,
+      'page': page,
+    }), headers: {'content-type': 'application/json'});
+  } catch (e) {
+    return Response.internalServerError(body: 'Error fetching popular rooms: $e');
+  }
+}
+
+/// Get categories for a platform
+Future<Response> _getCategories(Request request, String platform) async {
+  try {
+    final site = Sites.of(platform);
+    final categories = await site.liveSite.getCategores(1, 100);
+    
+    final categoryList = <Map<String, dynamic>>[];
+    for (var c in categories) {
+      categoryList.add({
+        'id': c.id,
+        'name': c.name,
+        'children': c.children.map((a) => a.toJson()).toList(),
+      });
+    }
+    
+    return Response.ok(jsonEncode({
+      'categories': categoryList,
+    }), headers: {'content-type': 'application/json'});
+  } catch (e) {
+    return Response.internalServerError(body: 'Error fetching categories: $e');
+  }
+}
+
+/// Get rooms in a specific category/area
+Future<Response> _getCategoryRooms(Request request, String platform, String areaType, String areaId) async {
+  try {
+    final page = int.tryParse(request.url.queryParameters['page'] ?? '1') ?? 1;
+    final areaName = request.url.queryParameters['areaName'] ?? '';
+    final site = Sites.of(platform);
+    
+    final area = LiveArea(
+      platform: platform,
+      areaType: areaType,
+      areaId: areaId,
+      areaName: areaName,
+    );
+    
+    final result = await site.liveSite.getCategoryRooms(area, page: page);
+    
+    return Response.ok(jsonEncode({
+      'items': result.items.map((r) => r.toJson()).toList(),
+      'hasMore': result.hasMore,
+      'page': page,
+    }), headers: {'content-type': 'application/json'});
+  } catch (e) {
+    return Response.internalServerError(body: 'Error fetching category rooms: $e');
+  }
+}
+
+/// Check if a room is in favorites
+Future<Response> _checkFavorite(Request request, String platform, String roomId) async {
+  final settings = Get.find<ServerSettings>();
+  final isFavorite = settings.favorites.any((r) => r.roomId == roomId && r.platform == platform);
+  return Response.ok(jsonEncode({'isFavorite': isFavorite}), headers: {'content-type': 'application/json'});
+}
+
+/// Get list of available platforms
+Future<Response> _getPlatforms(Request request) async {
+  final platforms = Sites.supportSites
+      .where((s) => s.id != 'iptv') // Exclude IPTV for web
+      .map((s) => {'id': s.id, 'name': s.name})
+      .toList();
+  return Response.ok(jsonEncode({'platforms': platforms}), headers: {'content-type': 'application/json'});
 }
