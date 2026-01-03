@@ -1,12 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pure Live Server</title>
+    <title>Pure Live</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Player Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/flv.js/dist/flv.min.js"></script>
 </head>
@@ -15,103 +14,133 @@
         <header class="navbar">
             <div class="logo">Pure Live</div>
             <nav>
-                <button id="nav-home" class="active">Home</button>
-                <button id="nav-popular">Popular</button>
-                <button id="nav-categories">Categories</button>
-                <button id="nav-favorites">Favorites</button>
-                <button id="nav-settings">Settings</button>
+                <button id="nav-popular" class="active">热门</button>
+                <button id="nav-categories">分类</button>
+                <button id="nav-favorites">关注</button>
+                <button id="nav-home">跳转</button>
+                <button id="nav-settings">设置</button>
             </nav>
         </header>
 
+        <!-- Back to top button -->
+        <button id="back-to-top" class="hidden" title="返回顶部">↑</button>
+
         <main id="main-content">
-            <!-- Player Container (shows above content when playing) -->
+            <!-- Main Player Container -->
             <div id="player-container" class="hidden">
-                <div class="player-header">
-                    <div class="player-info">
-                        <span id="player-title"></span>
-                        <span id="player-streamer"></span>
+                <div class="player-wrapper" id="player-wrapper">
+                    <video id="videoElement" controls></video>
+                    <!-- Auto-hiding overlay -->
+                    <div class="player-overlay" id="player-overlay">
+                        <div class="player-header">
+                            <div class="player-info">
+                                <span id="player-title"></span>
+                                <span id="player-streamer"></span>
+                            </div>
+                            <div class="player-controls">
+                                <select id="quality-select" title="画质"></select>
+                                <select id="line-select" title="线路"></select>
+                                <button id="pip-btn" class="icon-btn" title="画中画">⧉</button>
+                                <button id="favorite-btn" class="icon-btn" title="关注">
+                                    <span class="heart-icon">♡</span>
+                                </button>
+                                <button id="close-player" class="icon-btn" title="关闭">×</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="player-controls">
-                        <select id="quality-select"></select>
-                        <button id="favorite-btn" class="icon-btn">
-                            <span class="heart-icon">♡</span>
-                        </button>
-                        <button id="close-player" class="icon-btn">×</button>
+                    <div class="volume-indicator hidden" id="volume-indicator">
+                        <span id="volume-value">100%</span>
                     </div>
-                </div>
-                <video id="videoElement" controls autoplay></video>
-            </div>
-            
-            <!-- Home Section -->
-            <div id="input-section" class="section">
-                <h1>Watch Live Stream</h1>
-                <div class="input-group">
-                    <select id="platform-select">
-                        <option value="bilibili">Bilibili</option>
-                        <option value="douyu">Douyu</option>
-                        <option value="huya">Huya</option>
-                        <option value="douyin">Douyin</option>
-                        <option value="kuaishou">Kuaishou</option>
-                        <option value="cc">CC</option>
-                    </select>
-                    <input type="text" id="room-id-input" placeholder="Enter Room ID">
-                    <button id="play-btn">Play</button>
                 </div>
             </div>
 
-            <!-- Popular Rooms Section -->
-            <div id="popular-section" class="section hidden">
-                <h2>Popular Rooms</h2>
+            <!-- Mini Player (fixed position, uses same video) -->
+            <div id="mini-player" class="hidden">
+                <div class="mini-player-content">
+                    <span id="mini-player-title"></span>
+                    <div class="mini-player-controls">
+                        <button id="expand-player" class="icon-btn-sm" title="返回">↗</button>
+                        <button id="close-mini-player" class="icon-btn-sm" title="关闭">×</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Popular Rooms Section (Default) -->
+            <div id="popular-section" class="section">
+                <h2>热门直播</h2>
                 <div id="platform-tabs" class="platform-tabs"></div>
                 <div id="popular-grid" class="grid"></div>
                 <div id="popular-loading" class="loading-indicator hidden">
                     <div class="spinner"></div>
-                    <span>Loading...</span>
+                    <span>加载中...</span>
+                </div>
+                <div id="popular-error" class="error-message hidden">
+                    <span>加载失败</span>
+                    <button onclick="retryLoadPopular()">重试</button>
                 </div>
             </div>
 
             <!-- Categories Section -->
             <div id="categories-section" class="section hidden">
-                <h2>Categories</h2>
+                <h2>分类</h2>
                 <div id="category-platform-tabs" class="platform-tabs"></div>
                 <div id="category-list" class="category-list"></div>
                 <div id="category-rooms-container" class="hidden">
-                    <button id="back-to-categories" class="back-btn">← Back to Categories</button>
+                    <button id="back-to-categories" class="back-btn">← 返回分类</button>
                     <h3 id="category-title"></h3>
                     <div id="category-rooms-grid" class="grid"></div>
                     <div id="category-loading" class="loading-indicator hidden">
                         <div class="spinner"></div>
-                        <span>Loading...</span>
+                        <span>加载中...</span>
+                    </div>
+                    <div id="category-error" class="error-message hidden">
+                        <span>加载失败</span>
+                        <button onclick="retryLoadCategory()">重试</button>
                     </div>
                 </div>
             </div>
 
             <!-- Favorites Section -->
             <div id="favorites-section" class="section hidden">
-                <h2>Favorites</h2>
-                <div id="favorites-grid" class="grid">
-                    <!-- Favorites items will be injected here -->
+                <h2>我的关注</h2>
+                <div id="favorites-grid" class="grid"></div>
+                <p id="favorites-empty" class="empty-message hidden">还没有关注的直播间</p>
+            </div>
+
+            <!-- Direct Room Input Section -->
+            <div id="input-section" class="section hidden">
+                <h2>跳转直播间</h2>
+                <div class="input-group">
+                    <select id="platform-select">
+                        <option value="bilibili">哔哩哔哩</option>
+                        <option value="douyu">斗鱼</option>
+                        <option value="huya">虎牙</option>
+                        <option value="douyin">抖音</option>
+                        <option value="kuaishou">快手</option>
+                        <option value="cc">网易CC</option>
+                    </select>
+                    <input type="text" id="room-id-input" placeholder="输入房间号">
+                    <button id="play-btn">播放</button>
                 </div>
-                <p id="favorites-empty" class="empty-message hidden">No favorites yet. Add rooms to your favorites to see them here.</p>
             </div>
 
             <!-- Settings Section -->
             <div id="settings-section" class="section hidden">
-                <h2>Settings</h2>
+                <h2>设置</h2>
                 <div class="setting-item">
-                    <label>Bilibili Cookie</label>
-                    <input type="text" id="bilibili-cookie" placeholder="Enter cookie for higher quality streams">
-                    <button onclick="saveCookie('bilibili')">Save</button>
+                    <label>哔哩哔哩 Cookie</label>
+                    <input type="text" id="bilibili-cookie" placeholder="用于获取高画质">
+                    <button onclick="saveCookie('bilibili')">保存</button>
                 </div>
                 <div class="setting-item">
-                    <label>Douyin Cookie</label>
-                    <input type="text" id="douyin-cookie" placeholder="Enter cookie for Douyin">
-                    <button onclick="saveCookie('douyin')">Save</button>
+                    <label>抖音 Cookie</label>
+                    <input type="text" id="douyin-cookie" placeholder="用于抖音直播">
+                    <button onclick="saveCookie('douyin')">保存</button>
                 </div>
                 <div class="setting-item">
-                    <label>Huya Cookie</label>
-                    <input type="text" id="huya-cookie" placeholder="Enter cookie for Huya">
-                    <button onclick="saveCookie('huya')">Save</button>
+                    <label>虎牙 Cookie</label>
+                    <input type="text" id="huya-cookie" placeholder="用于虎牙直播">
+                    <button onclick="saveCookie('huya')">保存</button>
                 </div>
             </div>
         </main>
