@@ -922,6 +922,67 @@ button#play-btn:hover {
     .grid {
         grid-template-columns: repeat(2, 1fr);
     }
+    
+    /* Player overlay mobile adaptation */
+    .player-header {
+        padding: 10px 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .player-info {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .player-info #player-title,
+    #player-title {
+        font-size: 0.85rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .player-info #player-streamer,
+    #player-streamer {
+        font-size: 0.75rem;
+    }
+    
+    .player-controls {
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    
+    .icon-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 0.95rem;
+    }
+    
+    #quality-select, #line-select {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+        padding-right: 24px;
+        max-width: 80px;
+    }
+    
+    /* Click capture layer for touch devices */
+    .click-capture {
+        top: 50px;
+        bottom: 40px;
+    }
+    
+    /* Volume indicator smaller on mobile */
+    .volume-indicator {
+        padding: 10px 20px;
+        font-size: 1rem;
+    }
+    
+    /* Player overlay gradient needs more space on mobile */
+    .player-overlay .player-header {
+        background: linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0.7), transparent);
+        padding-bottom: 20px;
+    }
 }
 
 /* Modal */

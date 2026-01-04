@@ -40,6 +40,7 @@ void main(List<String> args) async {
   router.post('/api/favorites', _addFavorite);
   router.delete('/api/favorites/<platform>/<roomId>', _removeFavorite);
   router.post('/api/settings/cookie', _updateCookie);
+  router.post('/api/settings/line', _updateLinePreference);
   router.get('/api/settings', _getSettings);
   router.get('/api/platforms', _getPlatforms);
   router.get('/api/image', _proxyImage);
@@ -139,8 +140,13 @@ String _getClientIp(Request request) {
   }
   
   // Direct connection info
-  final connectionInfo = request.context['shelf.io.connection_info'] as shelf_io.HttpConnectionInfo?;
-  return connectionInfo?.remoteAddress.address ?? 'unknown';
+  final connectionInfo = request.context['shelf.io.connection_info'] as dynamic;
+  if (connectionInfo != null) {
+    try {
+      return connectionInfo.remoteAddress.address;
+    } catch (_) {}
+  }
+  return 'unknown';
 }
 
 /// Check if IP is private/local
@@ -279,7 +285,29 @@ Future<Response> _getSettings(Request request) async {
       'hasCookie': settings.huyaCookie.value.isNotEmpty,
       'cookie': settings.huyaCookie.value.isNotEmpty ? '******(已设置)' : '',
     },
+    'preferredLines': settings.preferredLines,
   }), headers: {'content-type': 'application/json'});
+}
+
+/// Update line preference for a platform
+Future<Response> _updateLinePreference(Request request) async {
+  try {
+    final payload = await request.readAsString();
+    final data = jsonDecode(payload);
+    final platform = data['platform'] as String?;
+    final lineIndex = data['lineIndex'] as int?;
+    
+    if (platform == null || lineIndex == null) {
+      return Response.badRequest(body: 'Missing platform or lineIndex');
+    }
+    
+    final settings = Get.find<ServerSettings>();
+    settings.setPreferredLine(platform, lineIndex);
+    
+    return Response.ok(jsonEncode({'success': true}), headers: {'content-type': 'application/json'});
+  } catch (e) {
+    return Response.badRequest(body: 'Invalid data: $e');
+  }
 }
 
 /// Get stream URLs with quality options

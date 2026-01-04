@@ -27,11 +27,14 @@ const state = {
     danmakuWs: null,
     danmakuEnabled: true,
     itemsPerPage: 12, // 3 rows x 4 columns
-    // Mini player state
+    // Mini player state (unified - moves main video element)
     miniPlayerActive: false,
     miniPlayerClosed: false, // User manually closed mini player for current stream
-    miniHlsPlayer: null,
-    miniFlvPlayer: null,
+    // Scroll flags
+    popularScrollPending: false,
+    categoryScrollPending: false,
+    // Line preferences
+    preferredLines: {},
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -279,10 +282,10 @@ function initMiniPlayer() {
         }
     });
     
-    // Click on mini player video to unmute/toggle
-    const miniVideo = document.getElementById('miniVideoElement');
-    miniVideo.addEventListener('click', () => {
-        miniVideo.muted = !miniVideo.muted;
+    // Click on mini player video to expand (go back to main player)
+    const miniVideoWrapper = document.querySelector('.mini-player-video-wrapper');
+    miniVideoWrapper.addEventListener('click', () => {
+        expandMiniPlayer();
     });
 }
 
@@ -313,7 +316,8 @@ function showMiniPlayer() {
     
     state.miniPlayerActive = true;
     const miniPlayer = document.getElementById('mini-player');
-    const miniVideo = document.getElementById('miniVideoElement');
+    const mainVideo = document.getElementById('videoElement');
+    const miniWrapper = document.querySelector('.mini-player-video-wrapper');
     const miniTitle = document.getElementById('mini-player-title');
     
     // Reset position when showing
@@ -325,12 +329,8 @@ function showMiniPlayer() {
     // Set title
     miniTitle.textContent = state.currentRoom?.title || '直播中';
     
-    // Get current stream URL
-    const lineIndex = parseInt(document.getElementById('line-select').value) || 0;
-    const url = state.currentStreamData.urls[lineIndex] || state.currentStreamData.urls[0];
-    
-    // Play in mini player
-    playMiniPlayerVideo(url);
+    // Move the main video element to mini player (keeps playback state)
+    miniWrapper.appendChild(mainVideo);
     
     // Show mini player with animation
     miniPlayer.classList.remove('hidden', 'hiding');
@@ -343,7 +343,11 @@ function hideMiniPlayer() {
     miniPlayer.classList.add('hiding');
     
     setTimeout(() => {
-        destroyMiniPlayers();
+        // Move video back to main player wrapper
+        const mainVideo = document.getElementById('videoElement');
+        const playerWrapper = document.getElementById('player-wrapper');
+        playerWrapper.insertBefore(mainVideo, playerWrapper.firstChild);
+        
         miniPlayer.classList.add('hidden');
         miniPlayer.classList.remove('hiding');
         state.miniPlayerActive = false;
@@ -356,63 +360,14 @@ function closeMiniPlayer() {
 }
 
 function expandMiniPlayer() {
-    // Scroll to main player
-    const playerContainer = document.getElementById('player-container');
-    playerContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    
-    // Hide mini player
+    // Hide mini player first (moves video back)
     hideMiniPlayer();
-}
-
-function playMiniPlayerVideo(url) {
-    const miniVideo = document.getElementById('miniVideoElement');
     
-    destroyMiniPlayers();
-    
-    miniVideo.src = '';
-    miniVideo.muted = true; // Start muted to allow autoplay
-    
-    const isHls = url.includes('.m3u8') || url.includes('m3u8');
-    const isFlv = url.includes('.flv') || url.includes('flv');
-    
-    if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
-        state.miniHlsPlayer = new Hls({ 
-            maxBufferLength: 10, 
-            maxMaxBufferLength: 30,
-            enableWorker: false 
-        });
-        state.miniHlsPlayer.loadSource(url);
-        state.miniHlsPlayer.attachMedia(miniVideo);
-        state.miniHlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => miniVideo.play().catch(() => {}));
-    } else if (isFlv && typeof flvjs !== 'undefined' && flvjs.isSupported()) {
-        state.miniFlvPlayer = flvjs.createPlayer({ 
-            type: 'flv', 
-            url: url, 
-            isLive: true,
-            enableWorker: false 
-        });
-        state.miniFlvPlayer.attachMediaElement(miniVideo);
-        state.miniFlvPlayer.load();
-        state.miniFlvPlayer.play();
-    } else {
-        miniVideo.src = url;
-        miniVideo.play().catch(() => {});
-    }
-}
-
-function destroyMiniPlayers() {
-    if (state.miniHlsPlayer) {
-        state.miniHlsPlayer.destroy();
-        state.miniHlsPlayer = null;
-    }
-    if (state.miniFlvPlayer) {
-        state.miniFlvPlayer.destroy();
-        state.miniFlvPlayer = null;
-    }
-    const miniVideo = document.getElementById('miniVideoElement');
-    if (miniVideo) {
-        miniVideo.src = '';
-    }
+    // Scroll to main player after a short delay for video to be moved back
+    setTimeout(() => {
+        const playerContainer = document.getElementById('player-container');
+        playerContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 300);
 }
 
 // Picture in Picture
@@ -433,18 +388,45 @@ async function togglePictureInPicture() {
 function initPagination() {
     document.getElementById('popular-prev').onclick = () => { 
         if (state.popularPage > 1) { 
-            state.popularPage--; 
-            loadPopularRooms(); 
+            state.popularPage--;
+            state.popularScrollPending = true;
+            loadPopularRooms();
         } 
     };
     document.getElementById('popular-next').onclick = () => { 
         if (state.popularHasMore) { 
-            state.popularPage++; 
-            loadPopularRooms(); 
+            state.popularPage++;
+            state.popularScrollPending = true;
+            loadPopularRooms();
         } 
     };
-    document.getElementById('category-prev').onclick = () => { if (state.categoryPage > 1) { state.categoryPage--; renderCategoryPage(); } };
-    document.getElementById('category-next').onclick = () => { if (state.categoryPage < state.categoryTotalPages) { state.categoryPage++; renderCategoryPage(); } };
+    document.getElementById('category-prev').onclick = () => { 
+        if (state.categoryPage > 1) { 
+            state.categoryPage--;
+            state.categoryScrollPending = true;
+            renderCategoryPage();
+        } 
+    };
+    document.getElementById('category-next').onclick = () => { 
+        if (state.categoryPage < state.categoryTotalPages) { 
+            state.categoryPage++;
+            state.categoryScrollPending = true;
+            renderCategoryPage();
+        } 
+    };
+}
+
+// Scroll to section header (not page top)
+function scrollToSectionHeader(section) {
+    let target;
+    if (section === 'popular') {
+        target = document.querySelector('#popular-section h2');
+    } else if (section === 'category') {
+        target = document.getElementById('category-title');
+    }
+    if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 }
 
 // Load platforms
@@ -552,6 +534,12 @@ function renderPopularPage() {
     document.getElementById('popular-page-info').textContent = `第 ${state.popularPage} 页`;
     document.getElementById('popular-prev').disabled = state.popularPage <= 1;
     document.getElementById('popular-next').disabled = !state.popularHasMore;
+    
+    // Scroll to section header after content loads (if pagination triggered)
+    if (state.popularScrollPending) {
+        scrollToSectionHeader('popular');
+        state.popularScrollPending = false;
+    }
 }
 
 function retryLoadPopular() {
@@ -683,6 +671,12 @@ function renderCategoryPage() {
     document.getElementById('category-page-info').textContent = `第 ${state.categoryPage} / ${state.categoryTotalPages} 页`;
     document.getElementById('category-prev').disabled = state.categoryPage <= 1;
     document.getElementById('category-next').disabled = state.categoryPage >= state.categoryTotalPages;
+    
+    // Scroll to section header after content loads (if pagination triggered)
+    if (state.categoryScrollPending) {
+        scrollToSectionHeader('category');
+        state.categoryScrollPending = false;
+    }
 }
 
 function retryLoadCategory() {
@@ -755,6 +749,13 @@ async function openRoom(room) {
     state.currentRoom = room;
     document.getElementById('platform-select').value = room.platform || 'bilibili';
     document.getElementById('room-id-input').value = room.roomId || '';
+    
+    // If mini player is active, just update the stream source without scrolling
+    if (state.miniPlayerActive) {
+        await updateStreamSource(room.platform, room.roomId);
+        return;
+    }
+    
     await playStream();
 }
 
@@ -793,10 +794,13 @@ async function playStream() {
             `<option value="${i}" ${i === data.selectedQuality ? 'selected' : ''}>${q.name}</option>`
         ).join('');
         
-        // Populate line selector
+        // Populate line selector and use preferred line
         const lineSelect = document.getElementById('line-select');
+        const preferredLine = state.preferredLines[platform] || 0;
+        const selectedLine = (preferredLine < data.urls.length) ? preferredLine : 0;
+        
         if (data.urls && data.urls.length > 1) {
-            lineSelect.innerHTML = data.urls.map((_, i) => `<option value="${i}">线路 ${i + 1}</option>`).join('');
+            lineSelect.innerHTML = data.urls.map((_, i) => `<option value="${i}" ${i === selectedLine ? 'selected' : ''}>线路 ${i + 1}</option>`).join('');
             lineSelect.style.display = 'block';
         } else {
             lineSelect.style.display = 'none';
@@ -805,20 +809,70 @@ async function playStream() {
         // Check favorite status
         await updateFavoriteButton(platform, roomId);
         
-        // Show player
+        // Show player (don't scroll to top - keep current position)
         document.getElementById('player-container').classList.remove('hidden');
-        scrollToTop();
         
         // Connect danmaku
         connectDanmaku(platform, roomId);
         
-        // Play stream
+        // Play stream using preferred line
         if (data.urls && data.urls.length > 0) {
-            playVideoUrl(data.urls[0]);
+            playVideoUrl(data.urls[selectedLine]);
         } else {
             alert('无可用播放地址');
         }
 
+    } catch (e) {
+        alert('错误: ' + e.message);
+    }
+}
+
+// Update stream source (for mini-player active scenario)
+async function updateStreamSource(platform, roomId) {
+    try {
+        const response = await fetch(`${apiBase}/stream/${platform}/${roomId}`);
+        if (!response.ok) throw new Error('获取直播流失败');
+        const data = await response.json();
+        
+        if (!data.success) {
+            alert(data.message || '直播间不可用');
+            return;
+        }
+        
+        state.miniPlayerClosed = false;
+        state.currentRoom = data.room;
+        state.currentStreamData = data;
+        
+        // Update main player UI (for when user expands mini player)
+        document.getElementById('player-title').textContent = data.room.title || '直播';
+        document.getElementById('player-streamer').textContent = data.room.nick || '';
+        document.getElementById('mini-player-title').textContent = data.room.title || '直播中';
+        
+        // Update quality selector
+        const qualitySelect = document.getElementById('quality-select');
+        qualitySelect.innerHTML = data.qualities.map((q, i) => 
+            `<option value="${i}" ${i === data.selectedQuality ? 'selected' : ''}>${q.name}</option>`
+        ).join('');
+        
+        // Update line selector
+        const lineSelect = document.getElementById('line-select');
+        if (data.urls && data.urls.length > 1) {
+            lineSelect.innerHTML = data.urls.map((_, i) => `<option value="${i}">线路 ${i + 1}</option>`).join('');
+            lineSelect.style.display = 'block';
+        } else {
+            lineSelect.style.display = 'none';
+        }
+        
+        // Update favorite button
+        await updateFavoriteButton(platform, roomId);
+        
+        // Reconnect danmaku
+        connectDanmaku(platform, roomId);
+        
+        // Update both main player and mini player (unified - just play)
+        if (data.urls && data.urls.length > 0) {
+            playVideoUrl(data.urls[0]);
+        }
     } catch (e) {
         alert('错误: ' + e.message);
     }
@@ -884,13 +938,18 @@ async function changeQuality() {
 
 function changeLine() {
     const lineIndex = parseInt(document.getElementById('line-select').value);
+    const platform = document.getElementById('platform-select').value;
+    
     if (state.currentStreamData?.urls?.[lineIndex]) {
         playVideoUrl(state.currentStreamData.urls[lineIndex]);
         
-        // Update mini player if active
-        if (state.miniPlayerActive) {
-            playMiniPlayerVideo(state.currentStreamData.urls[lineIndex]);
-        }
+        // Save line preference for this platform
+        state.preferredLines[platform] = lineIndex;
+        fetch(`${apiBase}/settings/line`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platform, lineIndex })
+        }).catch(e => console.error('Failed to save line preference:', e));
     }
 }
 
@@ -1048,6 +1107,11 @@ async function loadSettings() {
     try {
         const res = await fetch(`${apiBase}/settings`);
         const settings = await res.json();
+        
+        // Load line preferences
+        if (settings.preferredLines) {
+            state.preferredLines = settings.preferredLines;
+        }
         
         // Update bilibili login status
         if (settings.bilibili.hasCookie) {

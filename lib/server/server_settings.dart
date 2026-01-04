@@ -84,4 +84,15 @@ class ServerSettings implements AppSettings {
     _data['${platform}Cookie'] = cookie;
     save();
   }
+
+  // Line preferences per platform
+  Map<String, int> get preferredLines =>
+      Map<String, int>.from(_data['preferredLines'] ?? {});
+
+  void setPreferredLine(String platform, int lineIndex) {
+    final lines = preferredLines;
+    lines[platform] = lineIndex;
+    _data['preferredLines'] = lines;
+    save();
+  }
 }
