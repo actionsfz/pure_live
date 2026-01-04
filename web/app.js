@@ -1019,10 +1019,16 @@ function disconnectDanmaku() {
 }
 
 function addDanmakuMessage(msg) {
+    // Filter out empty or whitespace-only messages
+    const message = msg.message || '';
+    if (!message.trim()) {
+        return; // Skip empty danmaku
+    }
+    
     const list = document.getElementById('danmaku-list');
     const item = document.createElement('div');
     item.className = 'danmaku-item';
-    item.innerHTML = `<span class="username">${msg.userName || '匿名'}:</span><span class="message">${msg.message || ''}</span>`;
+    item.innerHTML = `<span class="username">${msg.userName || '匿名'}:</span><span class="message">${message}</span>`;
     list.appendChild(item);
     
     // Keep max 200 messages

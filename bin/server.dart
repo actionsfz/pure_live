@@ -499,7 +499,7 @@ Future<Response> _handleDanmakuWebSocket(Request request, String platform, Strin
       final room = await site.liveSite.getRoomDetail(roomId: roomId, platform: platform);
       
       if (room.danmakuData == null) {
-        webSocket.sink.add(jsonEncode({'type': 'error', 'message': '无法获取弹幕信息'}));
+        webSocket.sink.add(jsonEncode({'type': 'error', 'userName': '系统', 'message': '无法获取弹幕信息'}));
         await webSocket.sink.close();
         return;
       }
@@ -528,7 +528,7 @@ Future<Response> _handleDanmakuWebSocket(Request request, String platform, Strin
       
       danmaku.onReady = () {
         try {
-          webSocket.sink.add(jsonEncode({'type': 'ready', 'message': '弹幕已连接'}));
+          webSocket.sink.add(jsonEncode({'type': 'ready', 'userName': '系统', 'message': '弹幕已连接'}));
         } catch (e) {
           // Ignore
         }
@@ -543,7 +543,7 @@ Future<Response> _handleDanmakuWebSocket(Request request, String platform, Strin
       }
     } catch (e) {
       try {
-        webSocket.sink.add(jsonEncode({'type': 'error', 'message': '弹幕连接失败: $e'}));
+        webSocket.sink.add(jsonEncode({'type': 'error', 'userName': '系统', 'message': '弹幕连接失败: $e'}));
       } catch (_) {}
     } finally {
       danmaku?.stop();

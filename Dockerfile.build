@@ -1,0 +1,27 @@
+# Dockerfile for pure_live_server_build:latest base image
+# This image contains Dart SDK and all dependencies pre-installed
+# Usage: docker build -f Dockerfile.build -t pure_live_server_build:latest .
+
+FROM dart:stable AS base
+
+WORKDIR /app
+
+# Install native build tools required for dart_quickjs and other native extensions
+RUN apt-get update && apt-get install -y \
+    clang \
+    cmake \
+    ninja-build \
+    pkg-config \
+    libgtk-3-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy server pubspec and local packages first for better caching
+COPY pubspec_server.yaml pubspec.yaml
+COPY packages packages
+
+# Pre-fetch dependencies
+RUN dart pub get
+
+# The base image is now ready with Dart SDK and dependencies cached
+# Source code will be added and compiled in the main Dockerfile
