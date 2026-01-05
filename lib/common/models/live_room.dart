@@ -8,6 +8,7 @@ class LiveRoom {
   String? nick = '';
   String? avatar = '';
   String? cover = '';
+  String? keyframe = '';
   String? area = '';
   String? watching = '';
   String? followers = '';
@@ -40,6 +41,7 @@ class LiveRoom {
     this.nick = '',
     this.avatar = '',
     this.cover = '',
+    this.keyframe = '',
     this.area,
     this.watching = '0',
     this.followers = '0',
@@ -61,6 +63,7 @@ class LiveRoom {
       nick = json['nick'] ?? '',
       avatar = json['avatar'] ?? '',
       cover = json['cover'] ?? '',
+      keyframe = json['keyframe'] ?? '',
       area = json['area'] ?? '',
       watching = json['watching'] ?? '',
       followers = json['followers'] ?? '',
@@ -78,6 +81,7 @@ class LiveRoom {
     'nick': nick,
     'avatar': avatar,
     'cover': cover,
+    'keyframe': keyframe,
     'area': area,
     'watching': watching,
     'followers': followers,
@@ -98,6 +102,7 @@ class LiveRoom {
     String? nick,
     String? avatar,
     String? cover,
+    String? keyframe,
     String? area,
     String? watching,
     String? followers,
@@ -118,6 +123,7 @@ class LiveRoom {
       nick: nick ?? this.nick,
       avatar: avatar ?? this.avatar,
       cover: cover ?? this.cover,
+      keyframe: keyframe ?? this.keyframe,
       area: area ?? this.area,
       watching: watching ?? this.watching,
       followers: followers ?? this.followers,

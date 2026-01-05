@@ -35,6 +35,8 @@ const state = {
     categoryScrollPending: false,
     // Line preferences
     preferredLines: {},
+    // Keyframe mode - use live screenshots instead of cover (bilibili only)
+    useKeyframe: true,
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -65,6 +67,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Mini player event listeners
     document.getElementById('mini-player-expand').onclick = expandMiniPlayer;
     document.getElementById('mini-player-close').onclick = closeMiniPlayer;
+    
+    // Keyframe toggle
+    document.getElementById('keyframe-toggle').onclick = toggleKeyframeMode;
+    document.getElementById('keyframe-toggle-category').onclick = toggleKeyframeMode;
     
     // Load popular by default
     setTimeout(() => loadPopularRooms(), 100);
@@ -548,6 +554,33 @@ function retryLoadPopular() {
     loadPopularRooms();
 }
 
+// Toggle between keyframe (live screenshot) and cover images
+function toggleKeyframeMode() {
+    state.useKeyframe = !state.useKeyframe;
+    updateKeyframeButtons();
+    // Re-render current pages to apply change
+    if (state.popularData.length > 0) renderPopularPage();
+    if (state.categoryData.length > 0) renderCategoryPage();
+}
+
+// Update all keyframe toggle buttons to match state
+function updateKeyframeButtons() {
+    const buttons = [
+        document.getElementById('keyframe-toggle'),
+        document.getElementById('keyframe-toggle-category')
+    ];
+    buttons.forEach(btn => {
+        if (!btn) return;
+        if (state.useKeyframe) {
+            btn.classList.add('active');
+            btn.textContent = '📷 实时画面';
+        } else {
+            btn.classList.remove('active');
+            btn.textContent = '🖼️ 封面图';
+        }
+    });
+}
+
 // Categories
 async function loadCategories() {
     const list = document.getElementById('category-list');
@@ -709,7 +742,13 @@ function createRoomCard(room) {
     card.className = 'card';
     
     const isLive = room.liveStatus === 0 || room.status === true;
-    const cover = getCoverUrl(room.cover, room.platform);
+    
+    // For Bilibili: prefer keyframe (live screenshot) when available and enabled
+    let coverUrl = room.cover;
+    if (room.platform === 'bilibili' && state.useKeyframe && room.keyframe && isLive) {
+        coverUrl = room.keyframe;
+    }
+    const cover = getCoverUrl(coverUrl, room.platform);
     
     card.innerHTML = `
         <div class="card-cover">

@@ -105,8 +105,29 @@ class BiliBiliSite implements LiveSite {
       );
       items.add(roomItem);
     }
+    
+    // Batch fetch keyframes: roomIds -> UIDs -> keyframes
+    if (items.isNotEmpty) {
+      try {
+        var roomIds = items.map((r) => r.roomId!).toList();
+        var uidMap = await getUidsByRoomIds(roomIds);
+        var uids = uidMap.values.where((uid) => uid > 0).toList();
+        var keyframeMap = await getKeyframesByUids(uids);
+        
+        for (var room in items) {
+          var uid = uidMap[room.roomId];
+          if (uid != null && keyframeMap.containsKey(uid)) {
+            room.keyframe = keyframeMap[uid];
+          }
+        }
+      } catch (e) {
+        // Silently ignore keyframe fetch errors
+      }
+    }
+    
     return LiveCategoryResult(hasMore: hasMore, items: items);
   }
+
 
   @override
   Future<List<LivePlayQuality>> getPlayQualites({required LiveRoom detail}) async {
@@ -217,6 +238,26 @@ class BiliBiliSite implements LiveSite {
       );
       items.add(roomItem);
     }
+    
+    // Batch fetch keyframes: roomIds -> UIDs -> keyframes
+    if (items.isNotEmpty) {
+      try {
+        var roomIds = items.map((r) => r.roomId!).toList();
+        var uidMap = await getUidsByRoomIds(roomIds);
+        var uids = uidMap.values.where((uid) => uid > 0).toList();
+        var keyframeMap = await getKeyframesByUids(uids);
+        
+        for (var room in items) {
+          var uid = uidMap[room.roomId];
+          if (uid != null && keyframeMap.containsKey(uid)) {
+            room.keyframe = keyframeMap[uid];
+          }
+        }
+      } catch (e) {
+        // Silently ignore keyframe fetch errors
+      }
+    }
+    
     return LiveCategoryResult(hasMore: hasMore, items: items);
   }
 
@@ -229,6 +270,46 @@ class BiliBiliSite implements LiveSite {
       header: await getHeader(),
     );
     return result["data"];
+  }
+
+  /// Batch get UIDs by room IDs using getRoomBaseInfo API
+  Future<Map<String, int>> getUidsByRoomIds(List<String> roomIds) async {
+    if (roomIds.isEmpty) return {};
+    
+    var queryParams = <String, dynamic>{
+      "req_biz": "web_room_componet",
+      "room_ids": roomIds,
+    };
+    
+    var result = await HttpClient.instance.getJson(
+      "https://api.live.bilibili.com/xlive/web-room/v1/index/getRoomBaseInfo",
+      queryParameters: queryParams,
+      header: await getHeader(),
+    );
+    
+    Map<String, int> uidMap = {};
+    var byRoomIds = result["data"]?["by_room_ids"] as Map?;
+    byRoomIds?.forEach((key, value) {
+      uidMap[key.toString()] = value["uid"] as int? ?? 0;
+    });
+    return uidMap;
+  }
+
+  /// Batch get keyframes by UIDs using get_status_info_by_uids API
+  Future<Map<int, String>> getKeyframesByUids(List<int> uids) async {
+    if (uids.isEmpty) return {};
+    
+    var result = await HttpClient.instance.postJson(
+      "https://api.live.bilibili.com/room/v1/Room/get_status_info_by_uids",
+      data: {"uids": uids},
+      header: await getHeader(),
+    );
+    
+    Map<int, String> keyframes = {};
+    (result["data"] as Map?)?.forEach((key, value) {
+      keyframes[int.parse(key.toString())] = value["keyframe"]?.toString() ?? "";
+    });
+    return keyframes;
   }
 
   static String kImgKey = '';
@@ -371,6 +452,7 @@ class BiliBiliSite implements LiveSite {
         roomId: roomId,
         title: roomInfo["room_info"]["title"].toString(),
         cover: roomInfo["room_info"]["cover"].toString(),
+        keyframe: roomInfo["room_info"]?["keyframe"]?.toString() ?? "",
         nick: roomInfo["anchor_info"]["base_info"]["uname"].toString(),
         avatar: "${roomInfo["anchor_info"]["base_info"]["face"]}@100w.jpg",
         watching: roomInfo["room_info"]["online"].toString(),

@@ -517,6 +517,43 @@ nav button.active {
     color: white;
 }
 
+/* Tabs row with toggle */
+.tabs-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.tabs-row .platform-tabs {
+    margin-bottom: 0;
+}
+
+.toggle-btn {
+    padding: 0.5rem 1rem;
+    background-color: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    color: var(--secondary-text);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.toggle-btn:hover {
+    background-color: var(--surface-hover);
+    color: var(--text-color);
+}
+
+.toggle-btn.active {
+    background-color: var(--success-color);
+    border-color: var(--success-color);
+    color: white;
+}
+
 /* Pagination */
 .pagination {
     display: flex;
