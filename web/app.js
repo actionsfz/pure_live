@@ -1095,6 +1095,32 @@ async function loadFavorites() {
         const res = await fetch(`${apiBase}/favorites`);
         const favorites = await res.json();
         
+        // Batch fetch keyframes for Bilibili rooms
+        const biliRooms = favorites.filter(r => r.platform === 'bilibili' && r.userId);
+        if (biliRooms.length > 0) {
+            try {
+                const uids = biliRooms.map(r => parseInt(r.userId));
+                const kfRes = await fetch(`${apiBase}/bilibili/keyframes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ uids })
+                });
+                if (kfRes.ok) {
+                    const keyframes = await kfRes.json();
+                    favorites.forEach(room => {
+                        if (room.platform === 'bilibili' && room.userId) {
+                            const uid = parseInt(room.userId);
+                            if (keyframes[uid]) {
+                                room.keyframe = keyframes[uid];
+                            }
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to fetch keyframes', e);
+            }
+        }
+        
         grid.innerHTML = '';
         
         if (favorites.length === 0) {

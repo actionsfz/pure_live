@@ -49,6 +49,7 @@ void main(List<String> args) async {
   // Bilibili QR Login
   router.get('/api/bilibili/qr/generate', _generateBiliBiliQR);
   router.get('/api/bilibili/qr/poll', _pollBiliBiliQR);
+  router.post('/api/bilibili/keyframes', _getBilibiliKeyframes);
   
   // WebSocket for danmaku
   router.get('/ws/danmaku/<platform>/<roomId>', _handleDanmakuWebSocket);
@@ -218,16 +219,22 @@ Future<Response> _addFavorite(Request request) async {
   try {
     final payload = await request.readAsString();
     final data = jsonDecode(payload);
-    // We need to construct LiveRoom from data. 
-    // Simplified for now, expecting full object or minimal
-    /*
-      roomId: string;
-      platform: string;
-      ...
-    */
-    // Ideally we fetch room info to populate details
-    // For now, assume client sends valid LiveRoom structure
-    final room = LiveRoom.fromJson(data);
+    var room = LiveRoom.fromJson(data);
+    
+    // For Bilibili: fetch UID if not present
+    if (room.platform == Sites.bilibiliSite && (room.userId == null || room.userId!.isEmpty)) {
+      try {
+        final site = Sites.of(Sites.bilibiliSite) as BiliBiliSite;
+        final uidMap = await site.getUidsByRoomIds([room.roomId!]);
+        final uid = uidMap[room.roomId];
+        if (uid != null && uid > 0) {
+          room = room.copyWith(userId: uid.toString());
+        }
+      } catch (e) {
+        // Silently ignore UID fetch errors
+      }
+    }
+    
     final settings = Get.find<ServerSettings>();
     settings.addFavorite(room);
     return Response.ok('Added');
@@ -690,7 +697,7 @@ Future<Response> _pollBiliBiliQR(Request request) async {
           // Save and apply cookie
           final settings = Get.find<ServerSettings>();
           settings.updateCookie('bilibili', cookie);
-          final biliSite = Sites.of('bilibili').liveSite as BiliBiliSite;
+          final biliSite = Sites.of(Sites.bilibiliSite) as BiliBiliSite;
           biliSite.cookie = cookie;
           BiliBiliSite.kImgKey = '';
           BiliBiliSite.kSubKey = '';
@@ -716,5 +723,27 @@ Future<Response> _pollBiliBiliQR(Request request) async {
     }), headers: {'content-type': 'application/json'});
   } catch (e) {
     return Response.internalServerError(body: 'Error polling QR status: $e');
+  }
+}
+
+// / Batch get Bilibili keyframes
+Future<Response> _getBilibiliKeyframes(Request request) async {
+  try {
+    final payload = await request.readAsString();
+    final data = jsonDecode(payload);
+    final uids = List<int>.from(data['uids'] ?? []);
+    
+    if (uids.isEmpty) {
+      return Response.ok(jsonEncode({}));
+    }
+
+    final site = Sites.of(Sites.bilibiliSite) as BiliBiliSite;
+    final keyframes = await site.getKeyframesByUids(uids);
+    
+    return Response.ok(jsonEncode(keyframes),
+        headers: {'content-type': 'application/json'});
+  } catch (e) {
+    print('Error getting keyframes: $e');
+    return Response.badRequest(body: 'Invalid data');
   }
 }
