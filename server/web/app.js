@@ -39,6 +39,21 @@ const state = {
     useKeyframe: true,
 };
 
+// Toast notification function (replaces alert)
+function showToast(message, type = 'info', duration = 3000) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    
+    // Auto dismiss
+    setTimeout(() => {
+        toast.classList.add('hiding');
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
     initPlayerControls();
@@ -803,7 +818,7 @@ async function playStream() {
     const roomId = document.getElementById('room-id-input').value.trim();
 
     if (!roomId) {
-        alert('请输入房间号');
+        showToast('请输入房间号', 'warning');
         return;
     }
 
@@ -813,7 +828,7 @@ async function playStream() {
         const data = await response.json();
         
         if (!data.success) {
-            alert(data.message || '直播间不可用');
+            showToast(data.message || '直播间不可用', 'warning');
             return;
         }
         
@@ -858,11 +873,11 @@ async function playStream() {
         if (data.urls && data.urls.length > 0) {
             playVideoUrl(data.urls[selectedLine]);
         } else {
-            alert('无可用播放地址');
+            showToast('无可用播放地址', 'warning');
         }
 
     } catch (e) {
-        alert('错误: ' + e.message);
+        showToast('错误: ' + e.message, 'warning');
     }
 }
 
@@ -874,7 +889,7 @@ async function updateStreamSource(platform, roomId) {
         const data = await response.json();
         
         if (!data.success) {
-            alert(data.message || '直播间不可用');
+            showToast(data.message || '直播间不可用', 'warning');
             return;
         }
         
@@ -913,7 +928,7 @@ async function updateStreamSource(platform, roomId) {
             playVideoUrl(data.urls[0]);
         }
     } catch (e) {
-        alert('错误: ' + e.message);
+        showToast('错误: ' + e.message, 'warning');
     }
 }
 
@@ -930,12 +945,29 @@ function playVideoUrl(url) {
     const isFlv = url.includes('.flv') || url.includes('flv');
     
     if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
-        state.hlsPlayer = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 });
+        state.hlsPlayer = new Hls({ 
+            maxBufferLength: 30, 
+            maxMaxBufferLength: 60,
+            // Limit back buffer to 10 minutes (600 seconds) to prevent memory issues
+            liveBackBufferLength: 600,
+            liveDurationInfinity: false
+        });
         state.hlsPlayer.loadSource(url);
         state.hlsPlayer.attachMedia(videoElement);
         state.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => videoElement.play().catch(() => {}));
     } else if (isFlv && typeof flvjs !== 'undefined' && flvjs.isSupported()) {
-        state.flvPlayer = flvjs.createPlayer({ type: 'flv', url: url, isLive: true });
+        state.flvPlayer = flvjs.createPlayer({ 
+            type: 'flv', 
+            url: url, 
+            isLive: true 
+        }, {
+            // Enable auto cleanup to limit buffer memory usage
+            enableStashBuffer: true,
+            stashInitialSize: 128, // 128KB initial stash
+            autoCleanupSourceBuffer: true,
+            autoCleanupMaxBackwardDuration: 600, // 10 minutes back buffer limit
+            autoCleanupMinBackwardDuration: 300  // Start cleanup after 5 minutes
+        });
         state.flvPlayer.attachMediaElement(videoElement);
         state.flvPlayer.load();
         state.flvPlayer.play();
@@ -944,6 +976,7 @@ function playVideoUrl(url) {
         videoElement.play().catch(() => {});
     }
 }
+
 
 async function changeQuality() {
     const quality = document.getElementById('quality-select').value;
@@ -1089,10 +1122,11 @@ async function loadFavorites() {
     const grid = document.getElementById('favorites-grid');
     const emptyMsg = document.getElementById('favorites-empty');
     
-    grid.innerHTML = '<div class="loading-indicator"><div class="spinner"></div></div>';
+    grid.innerHTML = '<div class="loading-indicator"><div class="spinner"></div><span>正在刷新直播状态...</span></div>';
     
     try {
-        const res = await fetch(`${apiBase}/favorites`);
+        // Use refresh endpoint to get live status and sorted results
+        const res = await fetch(`${apiBase}/favorites/refresh`);
         const favorites = await res.json();
         
         // Batch fetch keyframes for Bilibili rooms
@@ -1213,10 +1247,10 @@ async function saveCookie(platform) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ platform, cookie })
         });
-        alert('保存成功！');
+        showToast('保存成功！', 'success');
         loadSettings(); // Reload settings to update display
     } catch (e) {
-        alert('保存失败: ' + e.message);
+        showToast('保存失败: ' + e.message, 'warning');
     }
 }
 

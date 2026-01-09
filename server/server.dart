@@ -36,6 +36,7 @@ void main(List<String> args) async {
   router.get('/api/categories/<platform>', _getCategories);
   router.get('/api/category/<platform>/<areaType>/<areaId>', _getCategoryRooms);
   router.get('/api/favorites', _getFavorites);
+  router.get('/api/favorites/refresh', _refreshFavorites);
   router.get('/api/favorites/check/<platform>/<roomId>', _checkFavorite);
   router.post('/api/favorites', _addFavorite);
   router.delete('/api/favorites/<platform>/<roomId>', _removeFavorite);
@@ -212,6 +213,57 @@ Future<Response> _getLiveStream(Request request, String platform, String roomId)
 Future<Response> _getFavorites(Request request) async {
   final settings = Get.find<ServerSettings>();
   return Response.ok(jsonEncode(settings.favorites.map((e) => e.toJson()).toList()),
+      headers: {'content-type': 'application/json'});
+}
+
+/// Refresh favorites with live status and return sorted (live first)
+Future<Response> _refreshFavorites(Request request) async {
+  final settings = Get.find<ServerSettings>();
+  final favorites = settings.favorites.toList();
+  
+  if (favorites.isEmpty) {
+    return Response.ok(jsonEncode([]), headers: {'content-type': 'application/json'});
+  }
+  
+  // Batch fetch room details to get live status
+  final updatedRooms = <LiveRoom>[];
+  
+  // Process in batches of 5 to avoid overwhelming the API
+  for (int i = 0; i < favorites.length; i += 5) {
+    final batch = favorites.sublist(i, i + 5 > favorites.length ? favorites.length : i + 5);
+    final futures = batch.where((room) => room.platform?.isNotEmpty ?? false).map((room) async {
+      try {
+        final site = Sites.of(room.platform!);
+        final detail = await site.liveSite.getRoomDetail(roomId: room.roomId!, platform: room.platform!);
+        return detail;
+      } catch (e) {
+        // Return original room if fetch failed
+        return room;
+      }
+    }).toList();
+    
+    try {
+      final results = await Future.wait(futures);
+      updatedRooms.addAll(results);
+    } catch (e) {
+      // Add original rooms if batch failed
+      updatedRooms.addAll(batch);
+    }
+  }
+  
+  // Sort: live rooms first, then by watching count
+  updatedRooms.sort((a, b) {
+    final aLive = a.liveStatus == LiveStatus.live ? 0 : 1;
+    final bLive = b.liveStatus == LiveStatus.live ? 0 : 1;
+    if (aLive != bLive) return aLive.compareTo(bLive);
+    
+    // Secondary sort by watching count (descending)
+    final aWatch = int.tryParse(a.watching ?? '0') ?? 0;
+    final bWatch = int.tryParse(b.watching ?? '0') ?? 0;
+    return bWatch.compareTo(aWatch);
+  });
+  
+  return Response.ok(jsonEncode(updatedRooms.map((e) => e.toJson()).toList()),
       headers: {'content-type': 'application/json'});
 }
 

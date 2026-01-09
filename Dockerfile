@@ -17,13 +17,19 @@ RUN dart pub get
 
 # Copy source code
 COPY lib lib
-COPY bin bin
-COPY web web
+COPY server server
 COPY assets assets
 
+# Debug: List directory structure
+RUN echo "=== Listing /app ===" && ls -la /app && \
+    echo "=== Listing /app/server ===" && ls -la /app/server && \
+    echo "=== Checking for server.dart ===" && \
+    if [ -f "server/server.dart" ]; then echo "Found server/server.dart"; else echo "NOT FOUND: server/server.dart"; fi
+
 # Compile the server using dart build (native assets support)
-# This outputs to bin/server/server (on Linux)
-RUN dart build cli bin/server.dart -o bin/server/server
+# Output to 'build' directory to avoid deleting source 'server' directory
+# This outputs to build/bin/server.exe (on Windows) or build/bin/server (on Linux)
+RUN dart build cli -t server/server.dart -o build
 
 
 # Build the runtime image
@@ -35,10 +41,10 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 WORKDIR /app
 
 # Copy the compiled executable and native assets
-COPY --from=build /app/bin/server/server /app/bin/server
+COPY --from=build /app/build/bundle/bin/server /app/server
 
-# Copy web assets
-COPY --from=build /app/web /app/web
+# Copy web static files
+COPY --from=build /app/server/web /app/web
 
 # Create data directory for volume mapping
 RUN mkdir -p /app/data
@@ -50,6 +56,6 @@ ENV PORT=9080
 EXPOSE 9080
 
 # Entry point
-CMD ["/app/bin/server/bundle/bin/server"]
+CMD ["/app/server"]
 
 
