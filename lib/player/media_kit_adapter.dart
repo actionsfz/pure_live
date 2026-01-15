@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:get/get.dart';
-import 'dart:developer' as dev;
 import 'package:rxdart/rxdart.dart';
 import 'unified_player_interface.dart';
 import 'package:pure_live/common/index.dart';
@@ -42,7 +41,11 @@ class MediaKitPlayerAdapter implements UnifiedPlayer {
     _disposed = false;
 
     _player = Player();
-
+    if (settings.customPlayerOutput.value) {
+      if (_player.platform is NativePlayer) {
+        await (_player.platform as dynamic).setProperty('ao', settings.audioOutputDriver.value);
+      }
+    }
     // Platform-specific configuration
     if (Platform.isAndroid) {
       final pp = _player.platform as NativePlayer;
@@ -54,6 +57,14 @@ class MediaKitPlayerAdapter implements UnifiedPlayer {
         ? VideoController(
             _player,
             configuration: VideoControllerConfiguration(vo: 'mediacodec_embed', hwdec: 'mediacodec'),
+          )
+        : settings.customPlayerOutput.value
+        ? VideoController(
+            _player,
+            configuration: VideoControllerConfiguration(
+              vo: settings.videoOutputDriver.value,
+              hwdec: settings.videoHardwareDecoder.value,
+            ),
           )
         : VideoController(
             _player,
@@ -86,7 +97,6 @@ class MediaKitPlayerAdapter implements UnifiedPlayer {
     _completedSub = _player.stream.completed.listen((isComplete) {
       if (_disposed || _completeSubject.isClosed) return;
       if (isComplete) {
-        dev.log('MediakitPlayer: The Video is completed');
         _completeSubject.add(true);
       }
     });
@@ -116,7 +126,7 @@ class MediaKitPlayerAdapter implements UnifiedPlayer {
   @override
   Future<void> setDataSource(String url, Map<String, String> headers) async {
     if (_disposed) return;
-    await _player.pause();
+    await _player.stop();
     await _player.open(Media(url, httpHeaders: headers));
   }
 

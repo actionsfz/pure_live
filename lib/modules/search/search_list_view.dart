@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'package:get/get.dart';
+import 'package:dio/dio.dart';
 import 'package:pure_live/common/index.dart';
 import 'package:waterfall_flow/waterfall_flow.dart';
 import 'package:pure_live/routes/app_navigation.dart';
@@ -64,8 +65,39 @@ class OwnerCard extends StatefulWidget {
 class _OwnerCardState extends State<OwnerCard> {
   SettingsService settings = Get.find<SettingsService>();
 
+  Future<String?> getFinalUrlWithDio(String requestUrl) async {
+    final dio = Dio();
+    try {
+      final response = await dio.get(
+        requestUrl,
+        options: Options(
+          followRedirects: false, // 禁止自动跳转
+          validateStatus: (status) => status! < 500,
+        ),
+      );
+      final redirectUrl = response.headers.value('location');
+      if (redirectUrl != null) {
+        return Uri.parse(redirectUrl).pathSegments.lastOrNull;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    } finally {
+      dio.close(); // 释放资源
+    }
+  }
+
   void _onTap(BuildContext context) async {
-    AppNavigator.toLiveRoomDetail(liveRoom: widget.room);
+    String roomId = widget.room.roomId!;
+    if (widget.room.platform == Sites.huyaSite) {
+      if (widget.room.roomId == '0') {
+        var roomIdInfo = await getFinalUrlWithDio('https://www.huya.com/yy/${widget.room.userId!}');
+        if (roomIdInfo != null) {
+          roomId = roomIdInfo;
+        }
+      }
+    }
+    AppNavigator.toLiveRoomDetail(liveRoom: widget.room.copyWith(roomId: roomId));
   }
 
   late bool isFavorite = settings.isFavorite(widget.room);

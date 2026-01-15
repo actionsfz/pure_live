@@ -24,13 +24,12 @@ class LivePlayPage extends GetView<LivePlayController> {
       _updateWakelock();
       final isInPip = SwitchableGlobalPlayer().isInPip.value;
       final mode = controller.screenMode.value;
-
       return Container(
         color: Colors.black,
         width: double.infinity,
         height: double.infinity,
         child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 500),
+          duration: const Duration(milliseconds: 50),
           child: _buildConstrainedChild(isInPip, mode, context),
           layoutBuilder: (currentChild, previousChildren) {
             return Stack(
