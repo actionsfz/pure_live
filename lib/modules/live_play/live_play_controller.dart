@@ -95,7 +95,11 @@ class LivePlayController extends StateController with GetSingleTickerProviderSta
     detail.value = room;
     currentSite = Sites.of(site);
     liveDanmaku = Sites.of(site).liveSite.getDanmaku();
-    onInitPlayerState();
+    onInitPlayerState(
+      reloadDataType: detail.value!.platform == Sites.bilibiliSite
+          ? ReloadDataType.changeLine
+          : ReloadDataType.refreash,
+    );
     EmojiManager().preload(site);
     debounce(closeTimeFlag, (callback) {
       if (closeTimeFlag.isTrue) {
@@ -121,17 +125,6 @@ class LivePlayController extends StateController with GetSingleTickerProviderSta
       exit(0);
     });
     tabController = TabController(length: tabs.length, vsync: this);
-  }
-
-  void resetRoom(Site site, String roomId) async {
-    success.value = false;
-    await videoController.value!.destory();
-    videoController.value = null;
-    Timer(const Duration(milliseconds: 4000), () {
-      if (Get.currentRoute == '/live_play') {
-        onInitPlayerState();
-      }
-    });
   }
 
   bool myInterceptor(bool stopDefaultButtonEvent, RouteInfo info) {
@@ -332,6 +325,7 @@ class LivePlayController extends StateController with GetSingleTickerProviderSta
       success.value = false;
       return;
     }
+    log(playUrl.toString(), name: "play_url");
     playUrls.value = playUrl;
     setPlayer();
   }
@@ -368,6 +362,7 @@ class LivePlayController extends StateController with GetSingleTickerProviderSta
     GlobalPlayerState().setCurrentRoom(room.roomId!);
     videoController.value = VideoController(
       room: detail.value!,
+      playUrs: playUrls.value,
       datasource: playUrls.value[currentLineIndex.value],
       allowScreenKeepOn: settings.enableScreenKeepOn.value,
       headers: headers,
@@ -431,6 +426,10 @@ class LivePlayController extends StateController with GetSingleTickerProviderSta
     currentSite = Sites.of(room.platform!);
     liveDanmaku = Sites.of(room.platform!).liveSite.getDanmaku();
     EmojiManager().preload(room.platform!);
-    onInitPlayerState();
+    onInitPlayerState(
+      reloadDataType: detail.value!.platform == Sites.bilibiliSite
+          ? ReloadDataType.changeLine
+          : ReloadDataType.refreash,
+    );
   }
 }

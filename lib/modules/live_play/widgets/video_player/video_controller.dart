@@ -22,6 +22,7 @@ import 'package:pure_live/pkg/canvas_danmaku/models/danmaku_content_item.dart';
 class VideoController with ChangeNotifier {
   final LiveRoom room;
   String datasource;
+  List<String> playUrs;
   final bool allowScreenKeepOn;
   final bool allowFullScreen;
   final Map<String, String> headers;
@@ -56,6 +57,16 @@ class VideoController with ChangeNotifier {
   GlobalKey playerKey = GlobalKey();
 
   Timer? _debounceTimer;
+  Timer? _hideVolumeTimer;
+  var showVolume = false.obs;
+
+  void updateVolumn(double volume) {
+    _hideVolumeTimer?.cancel();
+    showVolume = true.obs;
+    _hideVolumeTimer = Timer(const Duration(seconds: 1), () {
+      showVolume.value = false;
+    });
+  }
 
   void enableController() {
     showControllerTimer?.cancel();
@@ -81,6 +92,7 @@ class VideoController with ChangeNotifier {
     required this.room,
     required this.datasource,
     required this.headers,
+    required this.playUrs,
     this.allowScreenKeepOn = false,
     this.allowFullScreen = true,
     BoxFit fitMode = BoxFit.contain,
@@ -132,7 +144,7 @@ class VideoController with ChangeNotifier {
       FlutterVolumeController.updateShowSystemUI(false);
       registerVolumeListener();
     }
-    globalPlayer.setDataSource(datasource, headers, room);
+    globalPlayer.setDataSource(datasource, playUrs, headers, room);
     globalPlayer.onError.listen((error) {
       if (error != null) {
         log("An error occured while loading the stream: $error", error: error, name: "VideoController");
@@ -301,6 +313,7 @@ class VideoController with ChangeNotifier {
   }
 
   void toggleFullScreen() async {
+    log('toggleFullScreen called');
     showLocked.value = false;
     showControllerTimer?.cancel();
 

@@ -134,7 +134,7 @@ class AppInitializer {
     Get.put(BiliBiliAccountService());
     Get.put(PopularController());
     Get.put(AreasController());
-    Get.put(GlobalPlayerState(), permanent: true);
+    Get.put(GlobalPlayerState());
   }
 
   // 检查是否已初始化
